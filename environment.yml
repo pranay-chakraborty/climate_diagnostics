@@ -1,0 +1,36 @@
+name: climate-diagnostics
+
+channels:
+  - conda-forge
+
+dependencies:
+  - python
+  - xarray
+  - dask
+  - netCDF4
+  - bottleneck
+  # Scientific computing extras
+  - matplotlib
+  - numpy
+  - scipy
+
+  # Development dependencies
+  - pytest
+  - pytest-mock
+  - flake8
+  - jupyter
+  - ipykernel
+  - mypy
+  - pre-commit
+  - pip
+  - pip:
+      - pytest-cov
+      - black
+      - sphinx
+      - sphinx-rtd-theme
+      - nbsphinx
+      - tox
+      - build
+      - twine
+      - isort
+      - cartopy # not a development dependency
