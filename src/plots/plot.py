@@ -1,59 +1,65 @@
-#------------- importing necessary libraries ----------------#
-
-from plots.urls import uwnd_mon_mean, vwnd_mon_mean, air_mon_mean
 import xarray as xr
 import cartopy.crs as ccrs
 import matplotlib.pyplot as plt
+import numpy as np
 
 
-class plots:
-    def __init__(self, uwnd_url=None, vwnd_url=None, air_temp_url=None):
-        # Use parameters if provided, otherwise use imported constants
-        self.uwnd_url = uwnd_url if uwnd_url is not None else uwnd_mon_mean
-        self.vwnd_url = vwnd_url if vwnd_url is not None else vwnd_mon_mean
-        self.air_temp_url = air_temp_url if air_temp_url is not None else air_mon_mean
-        self.uwnd_data = None
-        self.vwnd_data = None
-        self.air_temp_data = None
+class Plots:
+    def __init__(self, filepath=None):
+        self.filepath = filepath
+        self.dataset = None
+        self._load_data()
 
-    def load_air_temperature(self):
-        """Load data from the URLs"""
+    def _load_data(self):
         try:
-            self.air_temp_data = xr.open_dataset(self.air_temp_url)
-            return True
+            if self.filepath:
+                self.dataset = xr.open_dataset(self.filepath, chunks='auto')
+                print(f"Dataset loaded from {self.filepath} with auto-chunking")
+            else:
+                print("Invalid filepath provided. Please specify a valid filepath.")
         except Exception as e:
             print(f"Error loading data: {e}")
-            return False
 
-    def plot_air_temperature(self, file_path=None, ax=None, **kwargs):
-        """
-        Plot air temperature from a NetCDF file.
+    def plot_mean(self, latitude=None, longitude=None, level=None,
+                       time_range=None, variable='air', cmap='coolwarm'):
+        if self.dataset is None:
+            raise ValueError("No dataset available for plotting. Please load data first.")
 
-        Args:
-            file_path (str): Path to the NetCDF file. If None, uses self.air_temp_data
-            ax (matplotlib.axes.Axes): Existing axes to plot on (optional)
-            **kwargs: Additional plotting arguments for xarray.DataArray.plot()
+        data = self.dataset
 
-        Returns:
-            matplotlib.axes.Axes: Axes object with the plot
-        """
-        if file_path:
-            ds = xr.open_dataset(file_path)
-        elif self.air_temp_data is not None:
-            ds = self.air_temp_data
-        else:
-            raise ValueError("No data source specified. Provide file_path or call load_data() first")
+        if variable not in data:
+            raise ValueError(f"Variable '{variable}' not found in dataset. Available variables: {list(data.data_vars)}")
 
-        if 'air' not in ds.variables:
-            raise ValueError("Dataset does not contain 'air' variable")
+        if latitude is not None:
+            data = data.sel(lat=latitude, method='nearest' if isinstance(latitude, (int, float)) else None)
 
-        if ax is None:
-            fig, ax = plt.subplots(figsize=(16, 10),
-                                   subplot_kw={'projection': ccrs.PlateCarree()})
+        if longitude is not None:
+            data = data.sel(lon=longitude, method='nearest' if isinstance(longitude, (int, float)) else None)
 
-        air_ds = ds['air']
-        plot = air_ds.plot(ax=ax,**kwargs)
+        if level is not None:
+            data = data.sel(level=level)
+
+        if time_range is not None:
+            data = data.sel(time=time_range)
+
+        if 'time' in data.dims:
+            data = data.mean(dim='time')
+            if hasattr(data, 'compute'):
+                data = data.compute()
+
+        if 'level' in data.dims:
+            data = data.mean(dim='level')
+            if hasattr(data, 'compute'):
+                data = data.compute()
+
+        plt.figure(figsize=(12, 8))
+        ax = plt.axes(projection=ccrs.PlateCarree())
         ax.coastlines()
         ax.gridlines(draw_labels=True)
+
+        im = data[variable].plot(ax=ax, transform=ccrs.PlateCarree(), cmap=cmap)
+        unit_label = data[variable].attrs.get('units', '')
+        plt.colorbar(im, ax=ax, shrink=0.7, label=f'{variable} ({unit_label})')
+        plt.title(f'Mean {variable} data')
 
         return ax
