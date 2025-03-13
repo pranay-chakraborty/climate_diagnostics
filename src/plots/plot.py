@@ -2,7 +2,7 @@ import xarray as xr
 import cartopy.crs as ccrs
 import matplotlib.pyplot as plt
 import numpy as np
-
+from dask.diagnostics import ProgressBar
 
 class Plots:
     def __init__(self, filepath=None):
@@ -82,7 +82,8 @@ class Plots:
         if 'level' in data.dims:
             data = data.mean(dim='level')
             if hasattr(data[variable], 'compute'):
-                data = data.compute()
+                with ProgressBar():
+                    data = data.compute()
 
         plt.figure(figsize=figsize)
         ax = plt.axes(projection=ccrs.PlateCarree())
@@ -147,7 +148,8 @@ class Plots:
                 data = data.sel(time=time_range)
             data = data.std(dim='time')
             if hasattr(data[variable], 'compute'):
-                data = data.compute()
+                with ProgressBar():
+                    data = data.compute()
         else:
             raise ValueError("Time dimension not found in dataset. Please load data with time dimension.")
 
