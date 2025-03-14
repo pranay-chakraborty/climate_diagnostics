@@ -106,7 +106,7 @@ class Plots:
 
         im = data[variable].plot(ax=ax, transform=ccrs.PlateCarree(), cmap='coolwarm')
         unit_label = data[variable].attrs.get('units', '')
-        plt.colorbar(im, ax=ax, shrink=0.7, label=f'{variable} ({unit_label})')
+        #plt.colorbar(im, ax=ax, shrink=0.7, label=f'{variable} ({unit_label})')
         plt.title(f'Mean {variable} data')
 
         return ax
@@ -189,7 +189,7 @@ class Plots:
 
         im = data[variable].plot(ax=ax, transform=ccrs.PlateCarree(),cmap = 'coolwarm')
         unit_label = data[variable].attrs.get('units', '')
-        plt.colorbar(im, ax=ax, shrink=0.7, label=f'{variable} ({unit_label})')
+        #plt.colorbar(im, ax=ax, shrink=0.7, label=f'{variable} ({unit_label})')
         plt.title(f'Standard Deviation of {variable} data')
         
         return ax
