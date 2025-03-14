@@ -104,7 +104,7 @@ class Plots:
         ax.coastlines()
         ax.gridlines(draw_labels=True)
 
-        im = data[variable].plot(ax=ax, transform=ccrs.PlateCarree())
+        im = data[variable].plot(ax=ax, transform=ccrs.PlateCarree(), cmap='coolwarm')
         unit_label = data[variable].attrs.get('units', '')
         plt.colorbar(im, ax=ax, shrink=0.7, label=f'{variable} ({unit_label})')
         plt.title(f'Mean {variable} data')
@@ -187,7 +187,7 @@ class Plots:
         ax.coastlines()
         ax.gridlines(draw_labels=True)
 
-        im = data[variable].plot(ax=ax, transform=ccrs.PlateCarree())
+        im = data[variable].plot(ax=ax, transform=ccrs.PlateCarree(),cmap = 'coolwarm')
         unit_label = data[variable].attrs.get('units', '')
         plt.colorbar(im, ax=ax, shrink=0.7, label=f'{variable} ({unit_label})')
         plt.title(f'Standard Deviation of {variable} data')
