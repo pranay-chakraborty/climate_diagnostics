@@ -55,9 +55,7 @@ dev = [
 
 [tool.setuptools]
 package-dir = {"" = "src"}
-find-namespace-packages = [
-    "src",
-]
+packages = {find = {where = ["src"]}}
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
