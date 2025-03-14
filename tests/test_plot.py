@@ -68,7 +68,8 @@ class TestPlots(unittest.TestCase):
     @patch('matplotlib.pyplot.axes')
     @patch('matplotlib.pyplot.colorbar')
     @patch('matplotlib.pyplot.title')
-    def test_plot_mean_basic(self, mock_title, mock_colorbar, mock_axes, mock_figure):
+    @patch('dask.diagnostics.ProgressBar')
+    def test_plot_mean_basic(self, mock_progress, mock_title, mock_colorbar, mock_axes, mock_figure):
         mock_ax = MagicMock()
         mock_axes.return_value = mock_ax
         
@@ -100,7 +101,8 @@ class TestPlots(unittest.TestCase):
     @patch('matplotlib.pyplot.axes')
     @patch('matplotlib.pyplot.colorbar')
     @patch('matplotlib.pyplot.title')
-    def test_plot_mean_with_selections(self, mock_title, mock_colorbar, mock_axes, mock_figure):
+    @patch('dask.diagnostics.ProgressBar')
+    def test_plot_mean_with_selections(self, mock_progress, mock_title, mock_colorbar, mock_axes, mock_figure):
         mock_ax = MagicMock()
         mock_axes.return_value = mock_ax
         
@@ -142,7 +144,90 @@ class TestPlots(unittest.TestCase):
     @patch('matplotlib.pyplot.axes')
     @patch('matplotlib.pyplot.colorbar')
     @patch('matplotlib.pyplot.title')
-    def test_plot_std_time(self, mock_title, mock_colorbar, mock_axes, mock_figure):
+    @patch('dask.diagnostics.ProgressBar')
+    def test_plot_mean_with_level_slice(self, mock_progress, mock_title, mock_colorbar, mock_axes, mock_figure):
+        mock_ax = MagicMock()
+        mock_axes.return_value = mock_ax
+        
+        ds = xr.Dataset(
+            data_vars=dict(
+                air=(["time", "level", "lat", "lon"], 
+                     np.random.rand(2, 3, 5, 5), 
+                     {'units': 'K'}),
+            ),
+            coords=dict(
+                lon=[-20, -10, 0, 10, 20],
+                lat=[-20, -10, 0, 10, 20],
+                time=pd.date_range('2023-01-01', periods=2),
+                level=[1000, 850, 500],
+            ),
+        )
+        
+        with patch.object(Plots, '_load_data'):
+            plots = Plots()
+            plots.dataset = ds
+            
+            with patch('xarray.DataArray.plot') as mock_plot:
+                mock_plot.return_value = MagicMock()
+                
+                # Test with a level slice
+                result = plots.plot_mean(
+                    level=slice(1000, 850),
+                    variable='air'
+                )
+                
+                self.assertEqual(result, mock_ax)
+                mock_figure.assert_called_once()
+                mock_axes.assert_called_once()
+                mock_plot.assert_called_once()
+    
+    @patch('matplotlib.pyplot.figure')
+    @patch('matplotlib.pyplot.axes')
+    @patch('matplotlib.pyplot.colorbar')
+    @patch('matplotlib.pyplot.title')
+    @patch('dask.diagnostics.ProgressBar')
+    def test_plot_mean_with_level_list(self, mock_progress, mock_title, mock_colorbar, mock_axes, mock_figure):
+        mock_ax = MagicMock()
+        mock_axes.return_value = mock_ax
+        
+        ds = xr.Dataset(
+            data_vars=dict(
+                air=(["time", "level", "lat", "lon"], 
+                     np.random.rand(2, 3, 5, 5), 
+                     {'units': 'K'}),
+            ),
+            coords=dict(
+                lon=[-20, -10, 0, 10, 20],
+                lat=[-20, -10, 0, 10, 20],
+                time=pd.date_range('2023-01-01', periods=2),
+                level=[1000, 850, 500],
+            ),
+        )
+        
+        with patch.object(Plots, '_load_data'):
+            plots = Plots()
+            plots.dataset = ds
+            
+            with patch('xarray.DataArray.plot') as mock_plot:
+                mock_plot.return_value = MagicMock()
+                
+                # Test with a level list
+                result = plots.plot_mean(
+                    level=[1000, 850],
+                    variable='air'
+                )
+                
+                self.assertEqual(result, mock_ax)
+                mock_figure.assert_called_once()
+                mock_axes.assert_called_once()
+                mock_plot.assert_called_once()
+    
+    @patch('matplotlib.pyplot.figure')
+    @patch('matplotlib.pyplot.axes')
+    @patch('matplotlib.pyplot.colorbar')
+    @patch('matplotlib.pyplot.title')
+    @patch('dask.diagnostics.ProgressBar')
+    def test_plot_std_time(self, mock_progress, mock_title, mock_colorbar, mock_axes, mock_figure):
         mock_ax = MagicMock()
         mock_axes.return_value = mock_ax
         
@@ -175,7 +260,8 @@ class TestPlots(unittest.TestCase):
     @patch('matplotlib.pyplot.axes')
     @patch('matplotlib.pyplot.colorbar')
     @patch('matplotlib.pyplot.title')
-    def test_plot_std_time_with_selections(self, mock_title, mock_colorbar, mock_axes, mock_figure):
+    @patch('dask.diagnostics.ProgressBar')
+    def test_plot_std_time_with_selections(self, mock_progress, mock_title, mock_colorbar, mock_axes, mock_figure):
         mock_ax = MagicMock()
         mock_axes.return_value = mock_ax
         
@@ -203,6 +289,46 @@ class TestPlots(unittest.TestCase):
                     variable='air',
                     latitude=slice(-10, 10),
                     longitude=slice(-10, 10)
+                )
+                
+                self.assertEqual(result, mock_ax)
+                mock_figure.assert_called_once()
+                mock_axes.assert_called_once()
+                mock_plot.assert_called_once()
+    
+    @patch('matplotlib.pyplot.figure')
+    @patch('matplotlib.pyplot.axes')
+    @patch('matplotlib.pyplot.colorbar')
+    @patch('matplotlib.pyplot.title')
+    @patch('dask.diagnostics.ProgressBar')
+    def test_plot_std_time_with_level_dimension(self, mock_progress, mock_title, mock_colorbar, mock_axes, mock_figure):
+        mock_ax = MagicMock()
+        mock_axes.return_value = mock_ax
+        
+        ds = xr.Dataset(
+            data_vars=dict(
+                air=(["time", "level", "lat", "lon"], 
+                     np.random.rand(2, 3, 5, 5), 
+                     {'units': 'K'}),
+            ),
+            coords=dict(
+                lon=[-20, -10, 0, 10, 20],
+                lat=[-20, -10, 0, 10, 20],
+                time=pd.date_range('2023-01-01', periods=2),
+                level=[1000, 850, 500],
+            ),
+        )
+        
+        with patch.object(Plots, '_load_data'):
+            plots = Plots()
+            plots.dataset = ds
+            
+            with patch('xarray.DataArray.plot') as mock_plot:
+                mock_plot.return_value = MagicMock()
+                
+                result = plots.plot_std_time(
+                    variable='air',
+                    level=500
                 )
                 
                 self.assertEqual(result, mock_ax)

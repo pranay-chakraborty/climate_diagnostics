@@ -41,7 +41,7 @@ class Plots:
         longitude : float, slice, or array-like, optional
             Longitude selection
         level : float or int, optional
-            Pressure level selection
+            Pressure level selection. If None, first level is used if available.
         time_range : slice or str, optional
             Time range selection
         variable : str, optional
@@ -62,25 +62,39 @@ class Plots:
         if variable not in data:
             raise ValueError(f"Variable '{variable}' not found in dataset. Available variables: {list(data.data_vars)}")
 
+        # Set default level if None and level dimension exists
+        if level is None and 'level' in data.dims and len(data.level) > 0:
+            level = data.level.values[0]
+
         if latitude is not None:
             data = data.sel(lat=latitude, method='nearest' if isinstance(latitude, (int, float)) else None)
 
         if longitude is not None:
             data = data.sel(lon=longitude, method='nearest' if isinstance(longitude, (int, float)) else None)
 
-        if level is not None and 'level' in data.dims:
-            data = data.sel(level=level)
+        # Handle level selection
+        if 'level' in data.dims:
+            if level is not None:
+                if isinstance(level, (slice, list, np.ndarray)):
+                    data = data.sel(level=level)
+                    data = data.mean(dim='level')
+                else:
+                    data = data.sel(level=level)
+        elif 'lev' in data.dims:  # Handle alternative naming
+            if level is not None:
+                if isinstance(level, (slice, list, np.ndarray)):
+                    data = data.sel(lev=level)
+                    data = data.mean(dim='lev')
+                else:
+                    data = data.sel(lev=level)
+        else:
+            print("Warning: Level dimension not found in dataset.")
 
         if time_range is not None and 'time' in data.dims:
             data = data.sel(time=time_range)
 
         if 'time' in data.dims:
             data = data.mean(dim='time')
-            if hasattr(data[variable], 'compute'):
-                data = data.compute()
-
-        if 'level' in data.dims:
-            data = data.mean(dim='level')
             if hasattr(data[variable], 'compute'):
                 with ProgressBar():
                     data = data.compute()
@@ -109,7 +123,7 @@ class Plots:
         longitude : float, slice, or array-like, optional
             Longitude selection
         level : float or int, optional
-            Pressure level selection
+            Pressure level selection. If None, first level is used if available.
         time_range : slice or str, optional
             Time range selection
         variable : str, optional
@@ -130,28 +144,43 @@ class Plots:
         if variable not in list(data.data_vars):
             raise ValueError(f"Variable '{variable}' not found in dataset. Available variables: {list(data.data_vars)}")
 
+        # Set default level if None and level dimension exists
+        if level is None and 'level' in data.dims and len(data.level) > 0:
+            level = data.level.values[0]
+
         if latitude is not None:
             data = data.sel(lat=latitude, method='nearest' if isinstance(latitude, (int, float)) else None)
 
         if longitude is not None:
             data = data.sel(lon=longitude, method='nearest' if isinstance(longitude, (int, float)) else None)
 
-        if 'level' in data.dims or 'lev' in data.dims:
-            level_dim = 'level' if 'level' in data.dims else 'lev'
+        if 'level' in data.dims:
             if level is not None:
-                data = data.sel({level_dim: level})
+                if isinstance(level, (slice, list, np.ndarray)):
+                    data = data.sel(level=level)
+                    data = data.mean(dim='level')
+                else:
+                    data = data.sel(level=level)
+        elif 'lev' in data.dims:  
+            if level is not None:
+                if isinstance(level, (slice, list, np.ndarray)):
+                    data = data.sel(lev=level)
+                    data = data.mean(dim='lev')
+                else:
+                    data = data.sel(lev=level)
         else:
             print("Warning: Level dimension not found in dataset.")
 
-        if 'time' in data.dims:
-            if time_range is not None:
-                data = data.sel(time=time_range)
-            data = data.std(dim='time')
-            if hasattr(data[variable], 'compute'):
-                with ProgressBar():
-                    data = data.compute()
-        else:
+        if 'time' not in data.dims:
             raise ValueError("Time dimension not found in dataset. Please load data with time dimension.")
+            
+        if time_range is not None:
+            data = data.sel(time=time_range)
+            
+        data = data.std(dim='time')
+        if hasattr(data[variable], 'compute'):
+            with ProgressBar():
+                data = data.compute()
 
         plt.figure(figsize=figsize)
         ax = plt.axes(projection=ccrs.PlateCarree())
@@ -164,4 +193,3 @@ class Plots:
         plt.title(f'Standard Deviation of {variable} data')
         
         return ax
-        
