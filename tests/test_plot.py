@@ -8,7 +8,7 @@ import tempfile
 import os
 import pytest
 
-from plots import Plots
+from climate_diagnostics.plots.plot import Plots
 
 class TestPlots(unittest.TestCase):
     
