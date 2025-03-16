@@ -16,6 +16,7 @@ class TimeSeries:
         self.filepath = filepath
         self.dataset = None
         self._load_data()
+        
     def _load_data(self):
         """Load dataset from the provided filepath with automatic chunking."""
         try:
@@ -27,86 +28,177 @@ class TimeSeries:
         except Exception as e:
             print(f"Error loading data: {e}")
             
-#==============================================================================#
-    # def plot_time_series(self, latitude=None, longitude=None, level=None,
-    #                   time_range=None, variable='air', figsize=(20, 10)):
-    #     """
-    #     Plot the standard deviation over time for the selected variable.
+    def plot_time_series(self, latitude=None, longitude=None, level=None,
+                    time_range=None, variable='air', figsize=(20, 10)):
+        """
+        Plot the time series for the selected variable (averaged across latitude and longitude).
         
-    #     Parameters:
-    #     -----------
-    #     latitude : float, slice, or array-like, optional
-    #         Latitude selection
-    #     longitude : float, slice, or array-like, optional
-    #         Longitude selection
-    #     level : float or int, optional
-    #         Pressure level selection. If None, first level is used if available.
-    #     time_range : slice or str, optional
-    #         Time range selection
-    #     variable : str, optional
-    #         Variable name to plot (default: 'air')
-    #     figsize : tuple, optional
-    #         Figure size (width, height) in inches
+        Parameters:
+        -----------
+        latitude : float, slice, or array-like, optional
+            Latitude selection
+        longitude : float, slice, or array-like, optional
+            Longitude selection
+        level : float or int, optional
+            Pressure level selection. If None, first level is used if available.
+        time_range : slice or str, optional
+            Time range selection
+        variable : str, optional
+            Variable name to plot (default: 'air')
+        figsize : tuple, optional
+            Figure size (width, height) in inches
             
-    #     Returns:
-    #     --------
-    #     matplotlib.axes.Axes
-    #         The axes object containing the plot
-    #     """
-    #     if self.dataset is None:
-    #         raise ValueError("No dataset available for plotting. Please load data first.")
+        Returns:
+        --------
+        matplotlib.axes.Axes
+            The axes object containing the plot
+        """
+        if self.dataset is None:
+            raise ValueError("No dataset available for plotting. Please load data first.")
         
-    #     data = self.dataset
+        data = self.dataset
         
-    #     if variable not in list(data.data_vars):
-    #         raise ValueError(f"Variable '{variable}' not found in dataset. Available variables: {list(data.data_vars)}")
+        if variable not in list(data.data_vars):
+            raise ValueError(f"Variable '{variable}' not found in dataset. Available variables: {list(data.data_vars)}")
 
-    #     # Set default level if None and level dimension exists
-    #     if level is None and 'level' in data.dims and len(data.level) > 0:
-    #         level = data.level.values[0]
+        # Set default level if None and level dimension exists
+        if level is None and 'level' in data.dims and len(data.level) > 0:
+            level = data.level.values[0]
 
-    #     if latitude is not None:
-    #         data = data.sel(lat=latitude, method='nearest' if isinstance(latitude, (int, float)) else None)
+        if latitude is not None:
+            data = data.sel(lat=latitude, method='nearest' if isinstance(latitude, (int, float)) else None)
 
-    #     if longitude is not None:
-    #         data = data.sel(lon=longitude, method='nearest' if isinstance(longitude, (int, float)) else None)
+        if longitude is not None:
+            data = data.sel(lon=longitude, method='nearest' if isinstance(longitude, (int, float)) else None)
 
-    #     if 'level' in data.dims:
-    #         if level is not None:
-    #             if isinstance(level, (slice, list, np.ndarray)):
-    #                 data = data.sel(level=level)
-    #                 data = data.mean(dim='level')
-    #             else:
-    #                 data = data.sel(level=level)
-    #     elif 'lev' in data.dims:  
-    #         if level is not None:
-    #             if isinstance(level, (slice, list, np.ndarray)):
-    #                 data = data.sel(lev=level)
-    #                 data = data.mean(dim='lev')
-    #             else:
-    #                 data = data.sel(lev=level)
-    #     else:
-    #         print("Warning: Level dimension not found in dataset.")
+        if 'level' in data.dims:
+            if level is not None:
+                if isinstance(level, (slice, list, np.ndarray)):
+                    data = data.sel(level=level)
+                    data = data.mean(dim='level')
+                else:
+                    data = data.sel(level=level)
+        elif 'lev' in data.dims:  
+            if level is not None:
+                if isinstance(level, (slice, list, np.ndarray)):
+                    data = data.sel(lev=level)
+                    data = data.mean(dim='lev')
+                else:
+                    data = data.sel(lev=level)
+        else:
+            print("Warning: Level dimension not found in dataset.")
 
-    #     if 'time' not in data.dims:
-    #         raise ValueError("Time dimension not found in dataset. Please load data with time dimension.")
+        if 'time' not in data.dims:
+            raise ValueError("Time dimension not found in dataset. Please load data with time dimension.")
             
-    #     if time_range is not None:
-    #         data = data.sel(time=time_range)
-            
-    #     data = data.std(dim='time')
-    #     if hasattr(data[variable], 'compute'):
-    #         with ProgressBar():
-    #             data = data.compute()
-
-    #     plt.figure(figsize=figsize)
-    #     ax = plt.axes(projection=ccrs.PlateCarree())
-    #     ax.coastlines()
-    #     ax.gridlines(draw_labels=True)
-
-    #     im = data[variable].plot(ax=ax, transform=ccrs.PlateCarree(),cmap = 'coolwarm')
-    #     unit_label = data[variable].attrs.get('units', '')
-    #     plt.colorbar(im, ax=ax, shrink=0.7, label=f'{variable} ({unit_label})')
-    #     plt.title(f'Standard Deviation of {variable} data')
+        if time_range is not None:
+            data = data.sel(time=time_range)
         
-    #     return ax
+        spatial_dims = []
+        if 'lat' in data.dims:
+            spatial_dims.append('lat')
+        if 'lon' in data.dims:
+            spatial_dims.append('lon')
+        
+        if spatial_dims:
+            data = data.mean(dim=spatial_dims)
+            
+        if hasattr(data[variable], 'compute'):
+            with ProgressBar():
+                data = data.compute()
+
+        plt.figure(figsize=figsize)
+        ax = data[variable].plot()
+        plt.title(f'Time series of {variable}')
+        plt.xlabel('Time')
+        plt.ylabel(f'{variable} {data[variable].attrs.get("units", "")}')
+        plt.grid(True, linestyle='--', alpha=0.7)
+        plt.tight_layout()
+        
+        return ax
+    
+    def plot_std_space(self, latitude=None, longitude=None, level=None,
+                      time_range=None, variable='air', figsize=(20, 10)):
+        """
+        Plot the standard deviation over time for the selected variable (averaged across latitude and longitude). Normalised.
+        
+        Parameters:
+        -----------
+        latitude : float, slice, or array-like, optional
+            Latitude selection
+        longitude : float, slice, or array-like, optional
+            Longitude selection
+        level : float or int, optional
+            Pressure level selection. If None, first level is used if available.
+        time_range : slice or str, optional
+            Time range selection
+        variable : str, optional
+            Variable name to plot (default: 'air')
+        figsize : tuple, optional
+            Figure size (width, height) in inches
+            
+        Returns:
+        --------
+        matplotlib.axes.Axes
+            The axes object containing the plot
+        """
+        if self.dataset is None:
+            raise ValueError("No dataset available for plotting. Please load data first.")
+        
+        data = self.dataset
+        
+        if variable not in list(data.data_vars):
+            raise ValueError(f"Variable '{variable}' not found in dataset. Available variables: {list(data.data_vars)}")
+
+        # Set default level if None and level dimension exists
+        if level is None and 'level' in data.dims and len(data.level) > 0:
+            level = data.level.values[0]
+
+        if latitude is not None:
+            data = data.sel(lat=latitude, method='nearest' if isinstance(latitude, (int, float)) else None)
+
+        if longitude is not None:
+            data = data.sel(lon=longitude, method='nearest' if isinstance(longitude, (int, float)) else None)
+
+        if 'level' in data.dims:
+            if level is not None:
+                if isinstance(level, (slice, list, np.ndarray)):
+                    data = data.sel(level=level)
+                    data = data.mean(dim='level')
+                else:
+                    data = data.sel(level=level)
+        elif 'lev' in data.dims:  
+            if level is not None:
+                if isinstance(level, (slice, list, np.ndarray)):
+                    data = data.sel(lev=level)
+                    data = data.mean(dim='lev')
+                else:
+                    data = data.sel(lev=level)
+        else:
+            print("Warning: Level dimension not found in dataset.")
+
+        if 'time' not in data.dims:
+            raise ValueError("Time dimension not found in dataset. Please load data with time dimension.")
+            
+        if time_range is not None:
+            data = data.sel(time=time_range)
+            
+        # Calculate the standard deviation over latitude and longitude
+        data = data.std(dim=['lat', 'lon'])
+        
+        # Normalize the result
+        data = (data - data.min()) / (data.max() - data.min())
+        
+        if hasattr(data[variable], 'compute'):
+            with ProgressBar():
+                data = data.compute()
+
+        plt.figure(figsize=figsize)
+        ax = data[variable].plot()
+        plt.title(f'Normalized Standard Deviation of {variable} over Latitude and Longitude')
+        plt.xlabel('Time')
+        plt.ylabel(f'Normalized {variable} Standard Deviation')
+        plt.grid(True, linestyle='--', alpha=0.7)
+        plt.tight_layout()
+        
+        return ax
