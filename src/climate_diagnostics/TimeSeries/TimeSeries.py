@@ -27,9 +27,53 @@ class TimeSeries:
                 print("Invalid filepath provided. Please specify a valid filepath.")
         except Exception as e:
             print(f"Error loading data: {e}")
+    
+    def _filter_by_season(self, season='annual'):
+        """
+        Filter the dataset by meteorological season.
+        
+        Parameters:
+        -----------
+        season : str, optional
+            Season to filter by. Options are:
+            - 'annual': All months (default)
+            - 'jjas': June, July, August, September
+            - 'djf': December, January, February
+            - 'mam': March, April, May
+            
+        Returns:
+        --------
+        xarray.Dataset
+            Filtered dataset
+        """
+        if self.dataset is None:
+            raise ValueError("No dataset available for filtering. Please load data first.")
+            
+        if season.lower() == 'annual':
+            return self.dataset
+            
+        if 'time' not in self.dataset.dims:
+            print("Warning: Cannot filter by season - no time dimension found.")
+            return self.dataset
+            
+        filtered_data = self.dataset.copy()
+            
+        if 'month' not in filtered_data.coords:
+            filtered_data = filtered_data.assign_coords(month=filtered_data.time.dt.month)
+            
+        if season.lower() == 'jjas':
+            return filtered_data.sel(time=filtered_data.time.dt.month.isin([6, 7, 8, 9]))
+        elif season.lower() == 'djf':
+            return filtered_data.sel(time=filtered_data.time.dt.month.isin([12, 1, 2]))
+        elif season.lower() == 'mam':
+            return filtered_data.sel(time=filtered_data.time.dt.month.isin([3, 4, 5]))
+        else:
+            print(f"Warning: Unknown season '{season}'. Using annual data.")
+            return filtered_data
             
     def plot_time_series(self, latitude=None, longitude=None, level=None,
-                    time_range=None, variable='air', figsize=(20, 10)):
+                    time_range=None, variable='air', figsize=(20, 10),
+                    season='annual'):
         """
         Plot the time series for the selected variable (averaged across latitude and longitude).
         
@@ -47,6 +91,12 @@ class TimeSeries:
             Variable name to plot (default: 'air')
         figsize : tuple, optional
             Figure size (width, height) in inches
+        season : str, optional
+            Season to plot. Options are:
+            - 'annual': All months (default)
+            - 'jjas': June, July, August, September
+            - 'djf': December, January, February
+            - 'mam': March, April, May
             
         Returns:
         --------
@@ -56,7 +106,10 @@ class TimeSeries:
         if self.dataset is None:
             raise ValueError("No dataset available for plotting. Please load data first.")
         
-        data = self.dataset
+        data = self._filter_by_season(season)
+        
+        if 'time' in data.dims and len(data.time) == 0:
+            raise ValueError(f"No data available for season '{season}' in the dataset.")
         
         if variable not in list(data.data_vars):
             raise ValueError(f"Variable '{variable}' not found in dataset. Available variables: {list(data.data_vars)}")
@@ -109,7 +162,9 @@ class TimeSeries:
 
         plt.figure(figsize=figsize)
         ax = data[variable].plot()
-        plt.title(f'Time series of {variable}')
+        
+        season_display = season.upper() if season.lower() != 'annual' else 'Annual'
+        plt.title(f'{season_display} Time series of {variable}')
         plt.xlabel('Time')
         plt.ylabel(f'{variable} {data[variable].attrs.get("units", "")}')
         plt.grid(True, linestyle='--', alpha=0.7)
@@ -118,7 +173,8 @@ class TimeSeries:
         return ax
     
     def plot_std_space(self, latitude=None, longitude=None, level=None,
-                      time_range=None, variable='air', figsize=(20, 10)):
+                      time_range=None, variable='air', figsize=(20, 10),
+                      season='annual'):
         """
         Plot the standard deviation over time for the selected variable (averaged across latitude and longitude). Normalised.
         
@@ -136,6 +192,12 @@ class TimeSeries:
             Variable name to plot (default: 'air')
         figsize : tuple, optional
             Figure size (width, height) in inches
+        season : str, optional
+            Season to plot. Options are:
+            - 'annual': All months (default)
+            - 'jjas': June, July, August, September
+            - 'djf': December, January, February
+            - 'mam': March, April, May
             
         Returns:
         --------
@@ -145,7 +207,10 @@ class TimeSeries:
         if self.dataset is None:
             raise ValueError("No dataset available for plotting. Please load data first.")
         
-        data = self.dataset
+        data = self._filter_by_season(season)
+        
+        if 'time' in data.dims and len(data.time) == 0:
+            raise ValueError(f"No data available for season '{season}' in the dataset.")
         
         if variable not in list(data.data_vars):
             raise ValueError(f"Variable '{variable}' not found in dataset. Available variables: {list(data.data_vars)}")
@@ -195,7 +260,9 @@ class TimeSeries:
 
         plt.figure(figsize=figsize)
         ax = data[variable].plot()
-        plt.title(f'Normalized Standard Deviation of {variable} over Latitude and Longitude')
+        
+        season_display = season.upper() if season.lower() != 'annual' else 'Annual'
+        plt.title(f'{season_display} Normalized Standard Deviation of {variable} over Latitude and Longitude')
         plt.xlabel('Time')
         plt.ylabel(f'Normalized {variable} Standard Deviation')
         plt.grid(True, linestyle='--', alpha=0.7)
