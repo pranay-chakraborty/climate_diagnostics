@@ -74,7 +74,7 @@ class TimeSeries:
             
     def plot_time_series(self, latitude=None, longitude=None, level=None,
                     time_range=None, variable='air', figsize=(20, 10),
-                    season='annual'):
+                    season='annual', year = None):
         """
         Plot the time series for the selected variable (averaged across latitude and longitude).
         
@@ -109,6 +109,9 @@ class TimeSeries:
         
         data = self._filter_by_season(season)
         
+        if year is not None:
+            data = data.sel(time=data.time.dt.year == year)
+            
         if 'time' in data.dims and len(data.time) == 0:
             raise ValueError(f"No data available for season '{season}' in the dataset.")
         
@@ -280,8 +283,8 @@ class TimeSeries:
         stl_period=12,
         area_weighted=True,
         plot_results=True,
-        figsize=(14, 12),
-        year = None
+        figsize=(14, 12)
+        # year = None
     ):
         """
         Decompose a climate time series into trend, seasonal, and residual components using STL.
@@ -330,8 +333,8 @@ class TimeSeries:
             raise ValueError("No dataset available for analysis. Please load data first.")
        
         data = self._filter_by_season(season)
-        if year is not None:
-            data = data.sel(time=data.time.dt.year == year)
+        # if year is not None:
+        #     data = data.sel(time=data.time.dt.year == year)
             
         if 'time' in data.dims and len(data.time) == 0:
             raise ValueError(f"No data available for season '{season}' in the dataset.")
