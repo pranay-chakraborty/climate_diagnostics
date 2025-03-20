@@ -155,14 +155,15 @@ class TimeSeries:
             spatial_dims.append('lon')
         
         if spatial_dims:
-            data = data.mean(dim=spatial_dims)
+            weights = np.cos(np.deg2rad(data.lat))
+            plot_data = (data[variable] * weights).sum(dim=spatial_dims) / weights.sum()
             
         if hasattr(data[variable], 'compute'):
             with ProgressBar():
-                data = data.compute()
+                plot_data = plot_data.compute()
 
         plt.figure(figsize=figsize)
-        ax = data[variable].plot()
+        ax = plot_data.plot()
         
         season_display = season.upper() if season.lower() != 'annual' else 'Annual'
         plt.title(f'{season_display} Time series of {variable}')
@@ -277,9 +278,10 @@ class TimeSeries:
         season='annual',
         stl_seasonal=13,
         stl_period=12,
-        area_weighted=False,
+        area_weighted=True,
         plot_results=True,
-        figsize=(14, 12)
+        figsize=(14, 12),
+        year = None
     ):
         """
         Decompose a climate time series into trend, seasonal, and residual components using STL.
@@ -326,9 +328,11 @@ class TimeSeries:
         """
         if self.dataset is None:
             raise ValueError("No dataset available for analysis. Please load data first.")
-        
+       
         data = self._filter_by_season(season)
-        
+        if year is not None:
+            data = data.sel(time=data.time.dt.year == year)
+            
         if 'time' in data.dims and len(data.time) == 0:
             raise ValueError(f"No data available for season '{season}' in the dataset.")
         
