@@ -13,6 +13,7 @@ dependencies:
   - matplotlib
   - numpy
   - scipy
+  - statsmodels
 
   # Development dependencies
   - pytest
