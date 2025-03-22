@@ -98,6 +98,7 @@ class TimeSeries:
             - 'jjas': June, July, August, September
             - 'djf': December, January, February
             - 'mam': March, April, May
+        year : Plot the annual cycle of the specified year 
             
         Returns:
         --------
@@ -160,6 +161,8 @@ class TimeSeries:
         if spatial_dims:
             weights = np.cos(np.deg2rad(data.lat))
             plot_data = (data[variable] * weights).sum(dim=spatial_dims) / weights.sum()
+        else:
+            plot_data = data[variable]
             
         if hasattr(data[variable], 'compute'):
             with ProgressBar():
