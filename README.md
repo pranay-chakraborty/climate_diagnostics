@@ -8,7 +8,7 @@ Climate Diagnostics Toolkit provides tools to process, analyze, and
 visualize climate data with an emphasis on time series analysis. The
 package offers seasonal filtering, spatial averaging with proper area
 weighting, standard deviation analysis, and time series decomposition
-capabilities.
+capabilities with many more to come in the near future.
 
 ### Features
 
