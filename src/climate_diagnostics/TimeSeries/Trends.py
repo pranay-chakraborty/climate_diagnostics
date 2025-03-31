@@ -7,6 +7,8 @@ from sklearn.linear_model import LinearRegression
 import pandas as pd
 from statsmodels.tsa.seasonal import STL
 import warnings
+from scipy import stats
+
 
 class Trends:
     def __init__(self, filepath=None):
@@ -16,7 +18,13 @@ class Trends:
         self._load_data()
 
     def _load_data(self):
-        """Load dataset with automatic chunking."""
+        """
+        
+        Load dataset with automatic chunking for efficient memory usage.
+        
+        Uses dask to lazily load data with automatic chunking along the time
+        dimension to optimize memory usage for large climate datasets.
+        """
         try:
             if self.filepath:
                 self.dataset = xr.open_dataset(self.filepath, chunks={'time': 'auto'})
@@ -27,7 +35,19 @@ class Trends:
             print(f"Error loading data: {e}")
 
     def _get_coord_name(self, possible_names):
-        """Find the actual coordinate name in the dataset."""
+        """
+        Find the actual coordinate name in the dataset from a list of common alternatives.
+        
+        Parameters
+        ----------
+        possible_names : list
+            List of possible coordinate names to search for (e.g., ['lat', 'latitude'])
+            
+        Returns
+        -------
+        str or None
+            The first matching coordinate name found in the dataset, or None if no match
+        """
         if self.dataset is None: return None
         for name in possible_names:
             if name in self.dataset.coords:
@@ -35,7 +55,22 @@ class Trends:
         return None
 
     def _filter_by_season(self, data_array, season='annual', time_coord_name='time'):
-        """Filter an xarray DataArray by meteorological season."""
+        """ Filter an xarray DataArray by meteorological season.
+        
+        Parameters
+        ----------
+        data_array : xarray.DataArray
+            Input data to be filtered
+        season : str, default='annual'
+            Season selection: 'annual' (no filtering), 'djf' (Dec-Feb), 
+            'mam' (Mar-May), or 'jjas' (Jun-Sep)
+        time_coord_name : str, default='time'
+            Name of the time coordinate in the data array
+            
+        Returns
+        -------
+        xarray.DataArray
+            Filtered data for the selected season"""
         if season.lower() == 'annual':
             return data_array
 
@@ -78,18 +113,51 @@ class Trends:
                         plot=True,
                         return_results=False):
         """
-        Calculate trends from time series using STL decomposition and linear regression.
+         Calculate trends from time series using STL decomposition and linear regression.
         
-        Parameters:
-        -----------
-        variable: Variable name (default: 'air')
-        latitude, longitude: Selection by point (float) or region (slice)
-        level: Pressure level selection 
-        season: 'annual', 'jjas', 'djf', or 'mam'
-        area_weighted: Apply cosine latitude weighting
-        period: Period for STL decomposition (default: 12 for monthly)
-        plot: Generate visualization
-        return_results: Return calculation results dictionary
+        Parameters
+        ----------
+        variable : str, default='air'
+            Variable name to analyze in the dataset
+        latitude : float, slice, or None
+            Latitude selection as point value (float) or region (slice)
+        longitude : float, slice, or None
+            Longitude selection as point value (float) or region (slice)
+        level : float, slice, or None
+            Pressure level selection (if applicable)
+        season : str, default='annual'
+            Season to analyze: 'annual', 'jjas' (Jun-Sep), 'djf' (Dec-Feb), 'mam' (Mar-May)
+        area_weighted : bool, default=True
+            Apply cosine latitude weighting for area-representative averaging
+        period : int, default=12
+            Period for STL decomposition (12 for monthly data)
+        plot : bool, default=True
+            Generate visualization of the trend analysis
+        return_results : bool, default=False
+            Return dictionary with calculation results
+            
+        Returns
+        -------
+        dict or None
+            If return_results=True, returns a dictionary containing:
+            - calculation_type: 'global', 'point', or 'region'
+            - trend_component: pandas.Series of the extracted trend
+            - regression_model: fitted LinearRegression object
+            - predicted_trend: pandas.Series of fitted trend values
+            - area_weighted: whether area weighting was applied
+            - region_details: metadata about variable, season, and level
+            - stl_period: period used for STL decomposition
+            - trend_statistics: pandas.DataFrame with regression statistics including:
+                - slope, intercept, p_value, r_value, r_squared, standard_error
+            
+        Raises
+        ------
+        ValueError
+            If dataset not loaded, variable not found, or selection/filtering issues
+        TypeError
+            For data type conversion issues or incompatible index types
+        RuntimeError
+            For processing failures
         """
         if self.dataset is None: raise ValueError("Dataset not loaded.")
         if variable not in self.dataset.variables: raise ValueError(f"Variable '{variable}' not found.")
@@ -216,7 +284,7 @@ class Trends:
                 raise ValueError("Processed data became a scalar value, cannot create time series.")
             raise ValueError(f"Processed data lost time dimension. Final dims: {processed_ts_da.dims}")
 
-        print("Converting to Pandas Series...")
+        #print("Converting to Pandas Series...")
         ts_pd = processed_ts_da.to_pandas()
 
         # Handle different pandas output types
@@ -275,7 +343,20 @@ class Trends:
         except Exception as e:
             print(f"Error during linear regression: {e}")
             raise
-
+        
+        
+        x_vals = dates_numeric.flatten()
+        y_vals = trend_component_clean.values
+        slope, intercept, r_value, p_value, slope_std_error = stats.linregress(x_vals, y_vals)
+        trend_stats_df = pd.DataFrame({
+                'slope': [slope],
+                'intercept': [intercept],
+                'p_value': [p_value],
+                'r_value': [r_value],
+                'r_squared': [r_value**2],
+                'standard_error': [slope_std_error]
+            })
+         
         # Plotting
         if plot:
             print("Generating plot...")
@@ -343,14 +424,13 @@ class Trends:
         if return_results:
             results = {
                 'calculation_type': calculation_type,
-                'raw_timeseries': ts_pd,
                 'trend_component': trend_component,
                 'regression_model': reg,
                 'predicted_trend': y_pred_series,
                 'area_weighted': area_weighted,
                 'region_details': {'variable': variable, 'season': season, 'level_info': level_selection_info},
-                'actual_coords': region_coords,
-                'stl_period': period
+                'stl_period': period,
+                'trend_statistics' : trend_stats_df
             }
             return results
         else:
