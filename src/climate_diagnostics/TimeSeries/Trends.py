@@ -15,6 +15,7 @@ class Trends:
         """Initialize the Trends class for analyzing climate data trends."""
         self.filepath = filepath
         self.dataset = None
+        
         self._load_data()
 
     def _load_data(self):
@@ -107,30 +108,45 @@ class Trends:
                         latitude=None,
                         longitude=None,
                         level=None,
+                        frequency='M',
                         season='annual',
                         area_weighted=True,
                         period=12,
                         plot=True,
-                        return_results=False):
+                        return_results=False
+                        ):
         """
          Calculate trends from time series using STL decomposition and linear regression.
+        
+        This method extracts a variable from the dataset, applies spatial and temporal
+        filtering, performs area-weighted averaging if requested, decomposes the time
+        series using STL to extract the trend component, and fits a linear regression 
+        to quantify the trend.
         
         Parameters
         ----------
         variable : str, default='air'
             Variable name to analyze in the dataset
         latitude : float, slice, or None
-            Latitude selection as point value (float) or region (slice)
+            Latitude selection as point value (float) or region (slice).
+            If None, uses all latitudes.
         longitude : float, slice, or None
-            Longitude selection as point value (float) or region (slice)
+            Longitude selection as point value (float) or region (slice).
+            If None, uses all longitudes.
         level : float, slice, or None
-            Pressure level selection (if applicable)
+            Pressure level selection (if applicable).
+            If None and level dimension exists, defaults to first level.
+        frequency : str, default='M'
+            Time frequency of data: 'M' (monthly), 'D' (daily), or 'Y' (yearly).
+            Used for proper scaling of trend rates.
         season : str, default='annual'
             Season to analyze: 'annual', 'jjas' (Jun-Sep), 'djf' (Dec-Feb), 'mam' (Mar-May)
         area_weighted : bool, default=True
-            Apply cosine latitude weighting for area-representative averaging
+            Apply cosine latitude weighting for area-representative averaging.
+            Only applicable for regional or global calculations.
         period : int, default=12
-            Period for STL decomposition (12 for monthly data)
+            Period for STL decomposition (12 for monthly data, 365 for daily data).
+            Should match the seasonal cycle in the data.
         plot : bool, default=True
             Generate visualization of the trend analysis
         return_results : bool, default=False
@@ -158,6 +174,15 @@ class Trends:
             For data type conversion issues or incompatible index types
         RuntimeError
             For processing failures
+            
+        Notes
+        -----
+        - For global calculations (latitude=None, longitude=None), area-weighted
+          averaging is applied by default to account for decreasing grid cell area
+          towards the poles.
+        - Trend significance is assessed through the p-value in the trend_statistics.
+        - The plot includes the extracted trend component and the linear fit.
+        
         """
         if self.dataset is None: raise ValueError("Dataset not loaded.")
         if variable not in self.dataset.variables: raise ValueError(f"Variable '{variable}' not found.")
@@ -284,7 +309,6 @@ class Trends:
                 raise ValueError("Processed data became a scalar value, cannot create time series.")
             raise ValueError(f"Processed data lost time dimension. Final dims: {processed_ts_da.dims}")
 
-        #print("Converting to Pandas Series...")
         ts_pd = processed_ts_da.to_pandas()
 
         # Handle different pandas output types
@@ -327,11 +351,51 @@ class Trends:
             raise ValueError("Trend component is all NaNs after STL.")
 
         try:
-            # Convert index to numerical format
-            if pd.api.types.is_numeric_dtype(trend_component_clean.index):
+            # Convert index to numerical format for regression
+            if pd.api.types.is_datetime64_any_dtype(trend_component_clean.index):
+                first_date = trend_component_clean.index.min()
+                
+                
+                # Set appropriate time unit based on frequency parameter
+                if frequency == 'M':
+                    scale = 24*3600*30  # seconds in ~month
+                    time_unit = "months"
+                    to_decade = 120      # months in a decade
+                elif frequency == 'D':
+                    scale = 24*3600      # seconds in day
+                    time_unit = "days"
+                    to_decade = 3652.5   # days in decade
+                elif frequency == 'Y':
+                    scale = 24*3600*365.25  # seconds in year
+                    time_unit = "years"
+                    to_decade = 10       # years in decade
+                else:
+                    # Default to years for climate data
+                    scale = 24*3600*365.25
+                    time_unit = "years"
+                    to_decade = 10
+                    print(f"Warning: Unknown frequency '{frequency}', defaulting to years")
+                
+                # Convert to the specified time units
+                dates_numeric = ((trend_component_clean.index - first_date).total_seconds() / scale).values.reshape(-1, 1)
+                
+                x_vals = dates_numeric.flatten()
+                y_vals = trend_component_clean.values
+                slope, intercept, r_value, p_value, slope_std_error = stats.linregress(x_vals, y_vals)
+                
+      
+                
+                
+                
+            elif pd.api.types.is_numeric_dtype(trend_component_clean.index):
                 dates_numeric = trend_component_clean.index.values.reshape(-1, 1)
-            elif pd.api.types.is_datetime64_any_dtype(trend_component_clean.index):
-                dates_numeric = pd.to_numeric(trend_component_clean.index).values.reshape(-1, 1)
+                time_unit = "units"
+                to_decade = None
+                x_vals = dates_numeric.flatten()
+                y_vals = trend_component_clean.values
+                slope, intercept, r_value, p_value, slope_std_error = stats.linregress(x_vals, y_vals)
+                
+                
             else:
                 raise TypeError(f"Trend index type ({trend_component_clean.index.dtype}) not recognized.")
 
@@ -340,22 +404,17 @@ class Trends:
             reg.fit(dates_numeric, y_train)
             y_pred_values = reg.predict(dates_numeric)
             y_pred_series = pd.Series(y_pred_values, index=trend_component_clean.index).reindex(original_index)
+            
         except Exception as e:
             print(f"Error during linear regression: {e}")
             raise
         
         
-        x_vals = dates_numeric.flatten()
-        y_vals = trend_component_clean.values
-        slope, intercept, r_value, p_value, slope_std_error = stats.linregress(x_vals, y_vals)
+        
         trend_stats_df = pd.DataFrame({
-                'slope': [slope],
-                'intercept': [intercept],
-                'p_value': [p_value],
-                'r_value': [r_value],
-                'r_squared': [r_value**2],
-                'standard_error': [slope_std_error]
-            })
+        'statistic': ['slope', 'intercept', 'p_value', 'r_value', 'r_squared','standard_error'],
+        'value': [slope, intercept, p_value, r_value, r_value**2,slope_std_error]
+         })
          
         # Plotting
         if plot:
