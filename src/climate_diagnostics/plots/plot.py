@@ -131,6 +131,8 @@ class Plots:
                 if isinstance(level, (slice, list, np.ndarray)):
                     data = data.sel(level=level)
                     data = data.mean(dim='level')
+                elif isinstance(level, (int, float)):
+                    data = data.sel(level = level , method = 'nearest')
                 else:
                     data = data.sel(level=level)
         elif 'lev' in data.dims:  # Handle alternative naming
@@ -138,6 +140,8 @@ class Plots:
                 if isinstance(level, (slice, list, np.ndarray)):
                     data = data.sel(lev=level)
                     data = data.mean(dim='lev')
+                elif isinstance(level, (int, float)):
+                    data = data.sel(lev = level , method = 'nearest')
                 else:
                     data = data.sel(lev=level)
         else:
