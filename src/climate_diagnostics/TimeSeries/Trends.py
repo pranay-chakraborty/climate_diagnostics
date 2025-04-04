@@ -311,14 +311,18 @@ class Trends:
 
         ts_pd = processed_ts_da.to_pandas()
 
-        # Handle different pandas output types
+         # Handle different pandas output types
         if not isinstance(ts_pd, pd.Series):
-            if isinstance(ts_pd, pd.DataFrame) and len(ts_pd.columns)==1:
-                warnings.warn(f"Conversion resulted in DataFrame; extracting single column '{ts_pd.columns[0]}'.")
-                ts_pd = ts_pd.iloc[:, 0]
+            if isinstance(ts_pd, pd.DataFrame):
+                if len(ts_pd.columns) == 1:
+                    warnings.warn(f"Conversion resulted in DataFrame; extracting single column '{ts_pd.columns[0]}'.")
+                    ts_pd = ts_pd.iloc[:, 0]
+                else:
+                    warnings.warn(f"Conversion resulted in DataFrame with multiple columns ({len(ts_pd.columns)}); using mean across columns.")
+                    ts_pd = ts_pd.mean(axis=1)
+            elif np.isscalar(ts_pd):
+                raise TypeError(f"Expected pandas Series, but got a scalar ({ts_pd}).")
             else:
-                if np.isscalar(ts_pd):
-                    raise TypeError(f"Expected pandas Series, but got a scalar ({ts_pd}).")
                 raise TypeError(f"Expected pandas Series, but got {type(ts_pd)}")
 
         if ts_pd.isnull().all():

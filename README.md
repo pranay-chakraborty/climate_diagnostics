@@ -26,12 +26,6 @@ Climate Diagnostics Toolkit provides powerful tools to process, analyze, and vis
 
 ## Installation
 
-### Using pip
-
-```bash
-pip install climate-diagnostics
-```
-
 ### From Source
 ```bash
 git clone https://github.com/username/climate-diagnostics.git
