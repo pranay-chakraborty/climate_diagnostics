@@ -2,43 +2,62 @@
 
 .. image:: https://img.shields.io/badge/Python-3.11+-blue.svg
    :alt: Python 3.11+
+   :target: https://www.python.org/downloads/
 
 .. image:: https://img.shields.io/badge/License-MIT-green.svg
    :alt: MIT License
+   :target: license.html
 
+.. image:: https://img.shields.io/badge/Documentation-Latest-brightgreen.svg
+   :alt: Documentation Status
+   :target: https://climate-diagnostics-toolkit.readthedocs.io/
+
+=====================
 Climate Diagnostics Toolkit
-==========================
+=====================
 
-*A Python package for analyzing and visualizing climate data with a focus on time series analysis and spatial pattern visualization.*
+*A comprehensive Python package for analyzing and visualizing climate data with powerful capabilities for time series analysis, trend detection, and spatial pattern visualization.*
 
 Overview
 --------
 
-Climate Diagnostics Toolkit provides powerful tools to process, analyze, and visualize climate data from NetCDF files. 
-The package offers robust functionality for seasonal filtering, spatial averaging with proper area weighting, 
-trend analysis, and time series decomposition to help climate scientists extract meaningful insights from large climate datasets.
+Climate Diagnostics Toolkit provides robust tools to process, analyze, and visualize climate data from NetCDF files.
+Designed specifically for climate scientists and researchers, this package offers sophisticated functionality for 
+seasonal filtering, spatial averaging with proper area weighting, trend analysis, and time series decomposition
+to extract meaningful insights from large meteorological datasets.
 
 Key Features
 -----------
 
 **Data Processing**
 
-* Load and process NetCDF climate data files with automatic chunking using dask
-* Filter data by meteorological seasons (Annual, DJF, MAM, JJAS)
-* Select data by latitude, longitude, level, and time range
+* Load and process NetCDF climate data files with automatic chunking using dask for memory efficiency
+* Filter data by meteorological seasons (Annual, DJF, MAM, JJA, JJAS, SON)
+* Flexible selection by latitude, longitude, pressure level, and time range
+* Automatic handling of coordinate naming conventions for maximum compatibility
 
 **Analysis**
 
-* Calculate area-weighted spatial averages that account for grid cell sizes
-* Compute time series statistics with proper spatial weighting
-* Decompose time series into trend, seasonal, and residual components
-* Extract and analyze trends with statistical significance testing
+* Calculate area-weighted spatial averages that properly account for decreasing grid cell area toward the poles
+* Compute time series statistics with sophisticated spatial weighting algorithms
+* Decompose time series into trend, seasonal, and residual components using STL (Seasonal-Trend decomposition using LOESS)
+* Extract and analyze trends with proper statistical significance testing (p-values, confidence intervals)
 
 **Visualization**
 
-* Generate publication-quality spatial maps with Cartopy projections
-* Create time series plots with proper metadata and formatting
-* Visualize trends and statistical distributions
+* Generate publication-quality spatial maps with Cartopy projections and geographical features
+* Create informative time series plots with automatic metadata handling and formatting
+* Visualize trends, statistical distributions, and spatial variability patterns
+* Support for customizing all visualization aspects using familiar matplotlib interfaces
+
+Core Components
+--------------
+
+The toolkit provides three primary modules:
+
+* ``TimeSeries`` - For extracting, analyzing and decomposing time series from climate data
+* ``Plots`` - For spatial visualization and mapping of climate variables
+* ``Trends`` - For calculating trends and assessing their statistical significance
 
 Quick Start
 ----------
@@ -50,6 +69,11 @@ Installation
 
    pip install climate-diagnostics-toolkit
 
+   # For development installation with additional dependencies:
+   git clone https://github.com/pranay-chakraborty/climate_diagnostics.git
+   cd climate-diagnostics
+   pip install -e ".[dev]"
+
 Basic Usage
 ^^^^^^^^^^
 
@@ -59,22 +83,35 @@ Basic Usage
 
    # Load data
    ts = TimeSeries("path/to/climate_data.nc")
+   plots = Plots("path/to/climate_data.nc")
+   trends = Trends("path/to/climate_data.nc")
+   
+   # Visualize spatial patterns
+   plots.plot_mean(
+       variable="air",
+       level=850,
+       season="djf"  # December-January-February
+   )
    
    # Plot time series for a specific region
    ts.plot_time_series(
-       latitude=slice(-30, 30),
-       longitude=slice(0, 180),
+       latitude=slice(-30, 30),     # 30°S to 30°N
+       longitude=slice(0, 180),     # 0° to 180°E
        level=850,
-       season="jjas"  # June-July-August-September
+       variable="air",
+       season="jjas"                # June-July-August-September
    )
    
    # Calculate and visualize trends
-   trends = Trends("path/to/climate_data.nc")
-   results = trends.calculate_trend(
+   trends.calculate_trend(
        variable="air",
        latitude=slice(-30, 30),
-       season="annual"
+       season="annual",
+       plot=True                    # Generate visualization
    )
+
+Documentation
+------------
 
 .. toctree::
    :maxdepth: 2
