@@ -11,13 +11,6 @@ Climate Diagnostics Toolkit
 
 *A Python package for analyzing and visualizing climate data with a focus on time series analysis and spatial pattern visualization.*
 
-.. figure:: _static/sample_figure.png
-   :width: 600px
-   :align: center
-   :alt: Climate Diagnostics Toolkit visualization example
-   
-   Example visualization created with Climate Diagnostics Toolkit
-
 Overview
 --------
 
@@ -55,7 +48,7 @@ Installation
 
 .. code-block:: bash
 
-   pip install climate-diagnostics
+   pip install climate-diagnostics-toolkit
 
 Basic Usage
 ^^^^^^^^^^

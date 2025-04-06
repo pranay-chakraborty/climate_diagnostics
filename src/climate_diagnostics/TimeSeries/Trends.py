@@ -11,8 +11,67 @@ from scipy import stats
 
 
 class Trends:
+    """
+    A class for analyzing and visualizing trend patterns in climate datasets.
+    
+    This class provides methods to load, filter, and analyze climate data trends
+    from NetCDF files. It supports statistical trend analysis using STL decomposition
+    and linear regression techniques, with proper spatial (area-weighted) averaging,
+    seasonal filtering, and robust visualization options.
+    
+    The Trends class is designed to handle common climate data formats with automatic
+    detection of coordinate names (lat, lon, time, level) for maximum compatibility
+    across different datasets and conventions.
+    
+    Parameters
+    ----------
+    filepath : str, optional
+        Path to the NetCDF or other compatible climate data file.
+        
+    Attributes
+    ----------
+    filepath : str
+        Path to the input data file.
+    dataset : xarray.Dataset
+        Loaded dataset with climate variables.
+        
+    Examples
+    --------
+    >>> from climate_diagnostics import Trends
+    >>> trends = Trends("/path/to/climate_data.nc")
+    >>> # Calculate global temperature trend
+    >>> results = trends.calculate_trend(
+    ...     variable="air",
+    ...     level=850,  # 850 hPa level
+    ...     season="annual",
+    ...     area_weighted=True,
+    ...     return_results=True
+    ... )
+    >>> # Access trend statistics
+    >>> print(results['trend_statistics'])
+    
+    Notes
+    -----
+    This class uses dask for efficient handling of large climate datasets and
+    supports proper area-weighted averaging to account for the decreasing grid
+    cell area toward the poles.
+    """
+    
     def __init__(self, filepath=None):
-        """Initialize the Trends class for analyzing climate data trends."""
+        """
+        Initialize the Trends class for analyzing climate data trends.
+        
+        Parameters
+        ----------
+        filepath : str, optional
+            Path to the NetCDF or other compatible climate data file.
+            If None, the dataset must be loaded manually later.
+            
+        Notes
+        -----
+        Upon initialization, the class attempts to load the dataset from the
+        provided filepath with automatic chunking for efficient memory usage.
+        """
         self.filepath = filepath
         self.dataset = None
         
@@ -20,11 +79,22 @@ class Trends:
 
     def _load_data(self):
         """
-        
         Load dataset with automatic chunking for efficient memory usage.
         
         Uses dask to lazily load data with automatic chunking along the time
-        dimension to optimize memory usage for large climate datasets.
+        dimension to optimize memory usage for large climate datasets. This 
+        method is called automatically during initialization if a filepath
+        is provided.
+        
+        Raises
+        ------
+        Exception
+            If the file cannot be loaded or is in an incompatible format.
+            
+        Notes
+        -----
+        The auto-chunking strategy uses the 'time' dimension by default,
+        which is optimal for most time series analysis operations.
         """
         try:
             if self.filepath:
@@ -39,6 +109,10 @@ class Trends:
         """
         Find the actual coordinate name in the dataset from a list of common alternatives.
         
+        This helper method searches for coordinate names in the dataset using a list
+        of possible naming conventions. For example, latitude might be named 'lat' or
+        'latitude' depending on the dataset conventions.
+        
         Parameters
         ----------
         possible_names : list
@@ -48,6 +122,13 @@ class Trends:
         -------
         str or None
             The first matching coordinate name found in the dataset, or None if no match
+            
+        Examples
+        --------
+        >>> trends = Trends("climate_data.nc")
+        >>> lat_name = trends._get_coord_name(['lat', 'latitude'])
+        >>> print(lat_name)
+        'lat'
         """
         if self.dataset is None: return None
         for name in possible_names:
@@ -56,7 +137,11 @@ class Trends:
         return None
 
     def _filter_by_season(self, data_array, season='annual', time_coord_name='time'):
-        """ Filter an xarray DataArray by meteorological season.
+        """
+        Filter an xarray DataArray by meteorological season.
+        
+        Creates a subset of the data containing only values from the specified
+        meteorological season. If the season is 'annual', no filtering is applied.
         
         Parameters
         ----------
@@ -71,7 +156,24 @@ class Trends:
         Returns
         -------
         xarray.DataArray
-            Filtered data for the selected season"""
+            Filtered data for the selected season
+            
+        Raises
+        ------
+        UserWarning
+            If filtering by the specified season results in no data points
+            
+        Notes
+        -----
+        - The method automatically creates a 'month' coordinate if not present.
+        - Season abbreviations follow standard meteorological conventions:
+          - 'djf': December, January, February (Northern Hemisphere winter)
+          - 'mam': March, April, May (Northern Hemisphere spring)
+          - 'jja': June, July, August (Northern Hemisphere summer)
+          - 'jjas': June, July, August, September (Northern Hemisphere extended summer)
+          - 'son': September, October, November (Northern Hemisphere fall/autumn)
+          - 'annual': All months (no filtering)
+        """
         if season.lower() == 'annual':
             return data_array
 
@@ -93,6 +195,10 @@ class Trends:
             mask = month_coord.isin([12, 1, 2])
         elif season.lower() == 'mam':
             mask = month_coord.isin([3, 4, 5])
+        elif season.lower() == 'jja':
+            mask = month_coord.isin([6, 7, 8])
+        elif season.lower() == 'son':
+            mask = month_coord.isin([9, 10, 11])
         else:
             print(f"Warning: Unknown season '{season}'. Using annual data.")
             return data_array
@@ -116,7 +222,7 @@ class Trends:
                         return_results=False
                         ):
         """
-         Calculate trends from time series using STL decomposition and linear regression.
+        Calculate trends from time series using STL decomposition and linear regression.
         
         This method extracts a variable from the dataset, applies spatial and temporal
         filtering, performs area-weighted averaging if requested, decomposes the time
@@ -180,9 +286,34 @@ class Trends:
         - For global calculations (latitude=None, longitude=None), area-weighted
           averaging is applied by default to account for decreasing grid cell area
           towards the poles.
-        - Trend significance is assessed through the p-value in the trend_statistics.
+        - Trend significance is assessed through the p_value in the trend_statistics.
         - The plot includes the extracted trend component and the linear fit.
         
+        Examples
+        --------
+        >>> trends = Trends("climate_data.nc")
+        >>> # Calculate global mean temperature trend
+        >>> results = trends.calculate_trend(
+        ...     variable="air", 
+        ...     level=850,
+        ...     frequency="M",
+        ...     return_results=True
+        ... )
+        >>> 
+        >>> # Check if trend is statistically significant (p < 0.05)
+        >>> p_value = results['trend_statistics'].loc[
+        ...     results['trend_statistics']['statistic'] == 'p_value', 'value'
+        ... ].values[0]
+        >>> print(f"Trend is {'significant' if p_value < 0.05 else 'not significant'}")
+        >>> 
+        >>> # Calculate regional trend for a specific season
+        >>> regional_results = trends.calculate_trend(
+        ...     variable="precip",
+        ...     latitude=slice(-15, 15),   # Tropical band
+        ...     longitude=slice(60, 180),  # Maritime continent to Pacific
+        ...     season="djf",              # Northern winter/Southern summer
+        ...     return_results=True
+        ... )
         """
         if self.dataset is None: raise ValueError("Dataset not loaded.")
         if variable not in self.dataset.variables: raise ValueError(f"Variable '{variable}' not found.")

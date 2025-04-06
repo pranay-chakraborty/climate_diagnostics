@@ -5,21 +5,64 @@ from dask.diagnostics import ProgressBar
 from statsmodels.tsa.seasonal import STL
 
 class TimeSeries:
+    """
+    A class for analyzing and visualizing time series from climate data.
+    
+    This class provides methods to load, filter, and analyze climate data
+    from NetCDF files. It supports spatial averaging with proper area weighting,
+    seasonal filtering, time series visualization, and decomposition into trend,
+    seasonal, and residual components using STL.
+    
+    Parameters
+    ----------
+    filepath : str, optional
+        Path to the NetCDF or other compatible climate data file.
+        
+    Attributes
+    ----------
+    filepath : str
+        Path to the input data file.
+    dataset : xarray.Dataset
+        Loaded dataset with climate variables.
+        
+    Examples
+    --------
+    >>> from climate_diagnostics import TimeSeries
+    >>> ts = TimeSeries("/path/to/climate_data.nc")
+    >>> ts.plot_time_series(variable="air", level=850, season="djf")
+    
+    Notes
+    -----
+    This class uses dask for efficient handling of large climate datasets.
+    """
+    
     def __init__(self, filepath=None):
         """
-        Initialize the TimeSeries class.
+        Initialize the TimeSeries class with climate data.
         
-        Parameters:
-        -----------
+        Parameters
+        ----------
         filepath : str, optional
-            Path to the netCDF or other compatible data file.
+            Path to the NetCDF or other compatible climate data file.
+            If None, no data will be loaded automatically.
         """
         self.filepath = filepath
         self.dataset = None
         self._load_data()
         
     def _load_data(self):
-        """Load dataset from the provided filepath with automatic chunking."""
+        """
+        Load dataset from the provided filepath with automatic chunking.
+        
+        Uses dask for efficient memory management when handling large
+        climate datasets. Data is loaded with automatic chunking to 
+        optimize performance.
+        
+        Raises
+        ------
+        Exception
+            If the file cannot be loaded or is in an incompatible format.
+        """
         try:
             if self.filepath:
                 self.dataset = xr.open_dataset(self.filepath, chunks='auto')
@@ -33,19 +76,32 @@ class TimeSeries:
         """
         Filter the dataset by meteorological season.
         
-        Parameters:
-        -----------
+        Creates a subset of the dataset containing only data from the 
+        specified meteorological season.
+        
+        Parameters
+        ----------
         season : str, optional
             Season to filter by. Options are:
             - 'annual': All months (default)
-            - 'jjas': June, July, August, September
-            - 'djf': December, January, February
-            - 'mam': March, April, May
+            - 'jjas': June, July, August, September (Northern Hemisphere summer)
+            - 'djf': December, January, February (Northern Hemisphere winter)
+            - 'mam': March, April, May (Northern Hemisphere spring)
             
-        Returns:
-        --------
+        Returns
+        -------
         xarray.Dataset
-            Filtered dataset
+            Filtered dataset containing only data from the specified season
+            
+        Raises
+        ------
+        ValueError
+            If no dataset is available for filtering
+            
+        Notes
+        -----
+        This function requires a time dimension in the dataset with datetime
+        values that include month information.
         """
         if self.dataset is None:
             raise ValueError("No dataset available for filtering. Please load data first.")
@@ -73,37 +129,77 @@ class TimeSeries:
             return filtered_data
             
     def plot_time_series(self, latitude=None, longitude=None, level=None,
-                    time_range=None, variable='air', figsize=(20, 10),
-                    season='annual', year = None):
+                         time_range=None, variable='air', figsize=(20, 10),
+                         season='annual', year=None):
         """
-        Plot the time series for the selected variable (averaged across latitude and longitude).
+        Plot the time series for the selected variable with proper area weighting.
         
-        Parameters:
-        -----------
+        Creates a time series visualization of the specified climate variable,
+        spatially averaged over the selected region with proper area weighting
+        that accounts for the decreasing grid cell area toward the poles.
+        
+        Parameters
+        ----------
         latitude : float, slice, or array-like, optional
-            Latitude selection
+            Latitude selection. Can be a specific value, a slice (e.g., 
+            slice(-30, 30) for 30°S to 30°N), or an array of values.
         longitude : float, slice, or array-like, optional
-            Longitude selection
+            Longitude selection. Can be a specific value, a slice (e.g.,
+            slice(0, 90) for 0° to 90°E), or an array of values.
         level : float or int, optional
-            Pressure level selection. If None, first level is used if available.
+            Pressure level selection in hPa or the unit used in the dataset.
+            If None, the first level is used if available.
         time_range : slice or str, optional
-            Time range selection
+            Time range selection. Can be a slice (e.g., slice('2010', '2020'))
+            or a string format understood by xarray.
         variable : str, optional
-            Variable name to plot (default: 'air')
+            Variable name to plot (default: 'air' for air temperature)
         figsize : tuple, optional
-            Figure size (width, height) in inches
+            Figure size (width, height) in inches. Default is (20, 10).
         season : str, optional
             Season to plot. Options are:
             - 'annual': All months (default)
-            - 'jjas': June, July, August, September
-            - 'djf': December, January, February
-            - 'mam': March, April, May
-        year : Plot the annual cycle of the specified year 
+            - 'jjas': June, July, August, September (Northern Hemisphere summer)
+            - 'djf': December, January, February (Northern Hemisphere winter)
+            - 'mam': March, April, May (Northern Hemisphere spring)
+        year : int, optional
+            If provided, plots data only for the specified year.
             
-        Returns:
-        --------
+        Returns
+        -------
         matplotlib.axes.Axes
-            The axes object containing the plot
+            The axes object containing the plot, which can be further customized.
+            
+        Raises
+        ------
+        ValueError
+            If the dataset is not loaded, the season has no data, or the 
+            variable is not found in the dataset.
+            
+        Examples
+        --------
+        >>> ts = TimeSeries("climate_data.nc")
+        >>> # Plot global mean temperature at 850 hPa for winter season
+        >>> ts.plot_time_series(
+        ...     level=850,
+        ...     variable="air",
+        ...     season="djf"
+        ... )
+        
+        >>> # Plot temperature for a specific region and time period
+        >>> ts.plot_time_series(
+        ...     latitude=slice(-15, 15),   # 15°S to 15°N
+        ...     longitude=slice(40, 100),  # 40°E to 100°E
+        ...     level=500,                 # 500 hPa
+        ...     time_range=slice('2000', '2020'),
+        ...     variable="air"
+        ... )
+            
+        Notes
+        -----
+        This method applies cosine latitude weighting to properly account
+        for the decreasing grid cell area toward the poles when calculating
+        spatial averages.
         """
         if self.dataset is None:
             raise ValueError("No dataset available for plotting. Please load data first.")
@@ -181,36 +277,75 @@ class TimeSeries:
         return ax
     
     def plot_std_space(self, latitude=None, longitude=None, level=None,
-                      time_range=None, variable='air', figsize=(20, 10),
-                      season='annual'):
+                       time_range=None, variable='air', figsize=(20, 10),
+                       season='annual'):
         """
-        Plot the standard deviation over time for the selected variable (averaged across latitude and longitude). Normalised.
+        Plot the spatial standard deviation time series of the selected variable.
         
-        Parameters:
-        -----------
+        Creates a time series visualization showing how the spatial variability
+        (standard deviation across latitudes and longitudes) of the selected
+        variable changes over time.
+        
+        Parameters
+        ----------
         latitude : float, slice, or array-like, optional
-            Latitude selection
+            Latitude selection. Can be a specific value, a slice (e.g., 
+            slice(-30, 30) for 30°S to 30°N), or an array of values.
         longitude : float, slice, or array-like, optional
-            Longitude selection
+            Longitude selection. Can be a specific value, a slice (e.g.,
+            slice(0, 90) for 0° to 90°E), or an array of values.
         level : float or int, optional
-            Pressure level selection. If None, first level is used if available.
+            Pressure level selection in hPa or the unit used in the dataset.
+            If None, the first level is used if available.
         time_range : slice or str, optional
-            Time range selection
+            Time range selection. Can be a slice (e.g., slice('2010', '2020'))
+            or a string format understood by xarray.
         variable : str, optional
-            Variable name to plot (default: 'air')
+            Variable name to plot (default: 'air' for air temperature)
         figsize : tuple, optional
-            Figure size (width, height) in inches
+            Figure size (width, height) in inches. Default is (20, 10).
         season : str, optional
             Season to plot. Options are:
             - 'annual': All months (default)
-            - 'jjas': June, July, August, September
-            - 'djf': December, January, February
-            - 'mam': March, April, May
+            - 'jjas': June, July, August, September (Northern Hemisphere summer)
+            - 'djf': December, January, February (Northern Hemisphere winter)
+            - 'mam': March, April, May (Northern Hemisphere spring)
             
-        Returns:
-        --------
+        Returns
+        -------
         matplotlib.axes.Axes
-            The axes object containing the plot
+            The axes object containing the plot, which can be further customized.
+            
+        Raises
+        ------
+        ValueError
+            If the dataset is not loaded, the season has no data, the variable
+            is not found, or there's no time dimension.
+            
+        Examples
+        --------
+        >>> ts = TimeSeries("climate_data.nc")
+        >>> # Plot spatial standard deviation of temperature
+        >>> ts.plot_std_space(
+        ...     level=850,
+        ...     variable="air",
+        ...     season="djf"
+        ... )
+        
+        >>> # Plot spatial variability for a specific region 
+        >>> ts.plot_std_space(
+        ...     latitude=slice(0, 45),     # 0° to 45°N
+        ...     longitude=slice(60, 120),  # 60°E to 120°E
+        ...     level=500,                 # 500 hPa
+        ...     variable="air",
+        ...     season="mam"               # March-April-May
+        ... )
+            
+        Notes
+        -----
+        This method calculates the standard deviation across spatial dimensions
+        (latitude and longitude) for each time point, providing insights into
+        how spatial variability changes over time.
         """
         if self.dataset is None:
             raise ValueError("No dataset available for plotting. Please load data first.")
@@ -274,6 +409,7 @@ class TimeSeries:
         plt.tight_layout()
         
         return ax
+
     def decompose_time_series(
         self,
         variable='air',
@@ -287,42 +423,53 @@ class TimeSeries:
         area_weighted=True,
         plot_results=True,
         figsize=(14, 12)
-        # year = None
     ):
         """
-        Decompose a climate time series into trend, seasonal, and residual components using STL.
+        Decompose a climate time series into trend, seasonal, and residual components.
         
-        Parameters:
-        -----------
+        Uses the Seasonal-Trend decomposition using LOESS (STL) method to separate
+        a climate time series into its constituent components. The method computes
+        a spatial average for the selected region with proper area weighting, then
+        performs the decomposition, extracting trend, seasonal cycle, and residual
+        components.
+        
+        Parameters
+        ----------
         variable : str, optional
-            Variable name to analyze, default is 'air'
+            Variable name to analyze (default: 'air' for air temperature)
         level : float or int, optional
-            Pressure level to analyze. If None, uses first available level
+            Pressure level to analyze in hPa. If None, uses first available level.
         latitude : float, slice, or array-like, optional
-            Latitude selection
+            Latitude selection. Can be a specific value, a slice (e.g., 
+            slice(-30, 30) for 30°S to 30°N), or an array of values.
         longitude : float, slice, or array-like, optional
-            Longitude selection
+            Longitude selection. Can be a specific value, a slice (e.g.,
+            slice(0, 90) for 0° to 90°E), or an array of values.
         time_range : slice or str, optional
-            Time range selection
+            Time range selection. Can be a slice (e.g., slice('2010', '2020'))
+            or a string format understood by xarray.
         season : str, optional
             Season to analyze. Options are:
             - 'annual': All months (default)
-            - 'jjas': June, July, August, September
-            - 'djf': December, January, February
-            - 'mam': March, April, May
+            - 'jjas': June, July, August, September (Northern Hemisphere summer)
+            - 'djf': December, January, February (Northern Hemisphere winter)
+            - 'mam': March, April, May (Northern Hemisphere spring)
         stl_seasonal : int, optional
-            Length of the seasonal smoother, default is 13
+            Length of the seasonal smoother in the STL decomposition (default: 13).
+            Higher values produce a smoother seasonal component.
         stl_period : int, optional
-            Period of the seasonal component, default is 12 (annual for monthly data)
+            Period of the seasonal component, default is 12 (annual cycle for monthly data).
+            Set according to the frequency of your data (e.g., 4 for quarterly, 12 for monthly).
         area_weighted : bool, optional
-            Whether to apply area weighting when computing spatial means, default is True
+            Whether to apply area weighting when computing spatial means to account
+            for the decreasing grid cell area toward the poles (default: True).
         plot_results : bool, optional
-            Whether to plot the decomposition results, default is True
+            Whether to plot the decomposition results (default: True).
         figsize : tuple, optional
-            Figure size if plotting results, default is (14, 12)
+            Figure size if plotting results, default is (14, 12).
         
-        Returns:
-        --------
+        Returns
+        -------
         dict
             Dictionary containing the decomposition components:
             - 'original': Original time series
@@ -330,14 +477,54 @@ class TimeSeries:
             - 'seasonal': Seasonal component
             - 'residual': Residual component
         matplotlib.figure.Figure, optional
-            Figure object if plot_results is True
+            Figure object if plot_results is True, containing four subplots
+            showing the original time series and its decomposed components.
+            
+        Raises
+        ------
+        ValueError
+            If the dataset is not loaded, the season has no data, or the
+            variable is not found in the dataset.
+            
+        Examples
+        --------
+        >>> ts = TimeSeries("climate_data.nc")
+        >>> # Decompose global mean temperature time series
+        >>> results, fig = ts.decompose_time_series(
+        ...     variable="air", 
+        ...     level=850,
+        ...     stl_period=12,  # For monthly data
+        ...     plot_results=True
+        ... )
+        >>> 
+        >>> # Access trend component
+        >>> trend = results['trend']
+        >>> 
+        >>> # Decompose regional time series without plotting
+        >>> results = ts.decompose_time_series(
+        ...     variable="air",
+        ...     latitude=slice(-30, 30),  # 30°S to 30°N
+        ...     longitude=slice(0, 360),  # Global longitude
+        ...     level=500,                # 500 hPa
+        ...     time_range=slice('1980', '2020'),
+        ...     season="annual",
+        ...     area_weighted=True,
+        ...     plot_results=False
+        ... )
+            
+        Notes
+        -----
+        The STL decomposition is particularly useful for climate data as it can
+        handle non-linear trends and seasonality that may change over time.
+        The 'residual' component often contains climate modes of variability
+        and extreme events after the trend and seasonal cycle are removed.
+        
+        
         """
         if self.dataset is None:
             raise ValueError("No dataset available for analysis. Please load data first.")
        
         data = self._filter_by_season(season)
-        # if year is not None:
-        #     data = data.sel(time=data.time.dt.year == year)
             
         if 'time' in data.dims and len(data.time) == 0:
             raise ValueError(f"No data available for season '{season}' in the dataset.")
@@ -427,4 +614,3 @@ class TimeSeries:
             return results, fig
         
         return results
-        
