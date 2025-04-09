@@ -2,413 +2,253 @@ import xarray as xr
 import matplotlib.pyplot as plt
 import numpy as np
 from dask.diagnostics import ProgressBar
-from statsmodels.tsa.seasonal import STL
+from statsmodels.tsa.seasonal import STL # Ensure statsmodels is installed
 
 class TimeSeries:
     """
-    A class for analyzing and visualizing time series from climate data.
-    
-    This class provides methods to load, filter, and analyze climate data
-    from NetCDF files. It supports spatial averaging with proper area weighting,
-    seasonal filtering, time series visualization, and decomposition into trend,
-    seasonal, and residual components using STL.
-    
-    Parameters
-    ----------
-    filepath : str, optional
-        Path to the NetCDF or other compatible climate data file.
-        
-    Attributes
-    ----------
-    filepath : str
-        Path to the input data file.
-    dataset : xarray.Dataset
-        Loaded dataset with climate variables.
-        
-    Examples
-    --------
-    >>> from climate_diagnostics import TimeSeries
-    >>> ts = TimeSeries("/path/to/climate_data.nc")
-    >>> ts.plot_time_series(variable="air", level=850, season="djf")
-    
-    Notes
-    -----
-    This class uses dask for efficient handling of large climate datasets.
+    Analyze and visualize time series from climate data, including
+    weighted spatial averaging/std dev and STL decomposition.
     """
-    
+
     def __init__(self, filepath=None):
-        """
-        Initialize the TimeSeries class with climate data.
-        
-        Parameters
-        ----------
-        filepath : str, optional
-            Path to the NetCDF or other compatible climate data file.
-            If None, no data will be loaded automatically.
-        """
+        """Initialize and load data."""
         self.filepath = filepath
         self.dataset = None
-        self._load_data()
-        
+        self._load_data() # Load data on initialization
+
     def _load_data(self):
-        """
-        Load dataset from the provided filepath with automatic chunking.
-        
-        Uses dask for efficient memory management when handling large
-        climate datasets. Data is loaded with automatic chunking to 
-        optimize performance.
-        
-        Raises
-        ------
-        Exception
-            If the file cannot be loaded or is in an incompatible format.
-        """
+        """Load dataset using xarray with dask chunks."""
         try:
             if self.filepath:
-                self.dataset = xr.open_dataset(self.filepath, chunks='auto')
-                print(f"Dataset loaded from {self.filepath} with auto-chunking")
+                 # Use netcdf4 engine, keep attributes
+                with xr.set_options(keep_attrs=True):
+                    self.dataset = xr.open_dataset(self.filepath, chunks='auto', engine='netcdf4')
+                print(f"Dataset loaded from {self.filepath}")
+                # Attempt common coordinate renaming
+                try:
+                    self.dataset = self.dataset.rename({'latitude': 'lat', 'longitude': 'lon'})
+                except ValueError:
+                    pass # Ignore if names don't exist
+                if 'lat' not in self.dataset.coords or 'lon' not in self.dataset.coords:
+                    print("Warning: Standard 'lat'/'lon' coordinates not found.")
             else:
-                print("Invalid filepath provided. Please specify a valid filepath.")
+                print("No filepath provided during initialization.")
+        except FileNotFoundError:
+             print(f"Error: File not found at {self.filepath}")
+             self.dataset = None
         except Exception as e:
-            print(f"Error loading data: {e}")
-    
-    def _filter_by_season(self, season='annual'):
-        """
-        Filter the dataset by meteorological season.
-        
-        Creates a subset of the dataset containing only data from the 
-        specified meteorological season.
-        
-        Parameters
-        ----------
-        season : str, optional
-            Season to filter by. Options are:
-            - 'annual': All months (default)
-            - 'jjas': June, July, August, September (Northern Hemisphere summer)
-            - 'djf': December, January, February (Northern Hemisphere winter)
-            - 'mam': March, April, May (Northern Hemisphere spring)
-            
-        Returns
-        -------
-        xarray.Dataset
-            Filtered dataset containing only data from the specified season
-            
-        Raises
-        ------
-        ValueError
-            If no dataset is available for filtering
-            
-        Notes
-        -----
-        This function requires a time dimension in the dataset with datetime
-        values that include month information.
-        """
-        if self.dataset is None:
-            raise ValueError("No dataset available for filtering. Please load data first.")
-            
+            print(f"Error loading data from {self.filepath}: {e}")
+            self.dataset = None
+
+    def _filter_by_season(self, data_subset, season='annual'):
+        """Filter data subset by meteorological season."""
         if season.lower() == 'annual':
-            return self.dataset
-            
-        if 'time' not in self.dataset.dims:
-            print("Warning: Cannot filter by season - no time dimension found.")
-            return self.dataset
-            
-        filtered_data = self.dataset.copy()
-            
-        if 'month' not in filtered_data.coords:
-            filtered_data = filtered_data.assign_coords(month=filtered_data.time.dt.month)
-            
-        if season.lower() == 'jjas':
-            return filtered_data.sel(time=filtered_data.time.dt.month.isin([6, 7, 8, 9]))
-        elif season.lower() == 'djf':
-            return filtered_data.sel(time=filtered_data.time.dt.month.isin([12, 1, 2]))
-        elif season.lower() == 'mam':
-            return filtered_data.sel(time=filtered_data.time.dt.month.isin([3, 4, 5]))
+            return data_subset
+        if 'time' not in data_subset.dims:
+            raise ValueError("Cannot filter by season - 'time' dimension not found.")
+
+        # Get month coordinate safely
+        if 'month' in data_subset.coords:
+            month_coord = data_subset['month']
+        elif np.issubdtype(data_subset['time'].dtype, np.datetime64):
+             month_coord = data_subset.time.dt.month
         else:
-            print(f"Warning: Unknown season '{season}'. Using annual data.")
+             raise ValueError("Cannot determine month for seasonal filtering.")
+
+        season_months = {'jjas': [6, 7, 8, 9], 'djf': [12, 1, 2], 'mam': [3, 4, 5], 'son': [9, 10, 11]}
+        selected_months = season_months.get(season.lower())
+
+        if selected_months:
+            # Use where for robustness, drop times outside the season
+            filtered_data = data_subset.where(month_coord.isin(selected_months), drop=True)
+            if filtered_data.time.size == 0:
+                 print(f"Warning: No data found for season '{season.upper()}' within the selected time range.")
             return filtered_data
-            
-    def plot_time_series(self, latitude=None, longitude=None, level=None,
-                         time_range=None, variable='air', figsize=(20, 10),
-                         season='annual', year=None):
-        """
-        Plot the time series for the selected variable with proper area weighting.
-        
-        Creates a time series visualization of the specified climate variable,
-        spatially averaged over the selected region with proper area weighting
-        that accounts for the decreasing grid cell area toward the poles.
-        
-        Parameters
-        ----------
-        latitude : float, slice, or array-like, optional
-            Latitude selection. Can be a specific value, a slice (e.g., 
-            slice(-30, 30) for 30°S to 30°N), or an array of values.
-        longitude : float, slice, or array-like, optional
-            Longitude selection. Can be a specific value, a slice (e.g.,
-            slice(0, 90) for 0° to 90°E), or an array of values.
-        level : float or int, optional
-            Pressure level selection in hPa or the unit used in the dataset.
-            If None, the first level is used if available.
-        time_range : slice or str, optional
-            Time range selection. Can be a slice (e.g., slice('2010', '2020'))
-            or a string format understood by xarray.
-        variable : str, optional
-            Variable name to plot (default: 'air' for air temperature)
-        figsize : tuple, optional
-            Figure size (width, height) in inches. Default is (20, 10).
-        season : str, optional
-            Season to plot. Options are:
-            - 'annual': All months (default)
-            - 'jjas': June, July, August, September (Northern Hemisphere summer)
-            - 'djf': December, January, February (Northern Hemisphere winter)
-            - 'mam': March, April, May (Northern Hemisphere spring)
-        year : int, optional
-            If provided, plots data only for the specified year.
-            
-        Returns
-        -------
-        matplotlib.axes.Axes
-            The axes object containing the plot, which can be further customized.
-            
-        Raises
-        ------
-        ValueError
-            If the dataset is not loaded, the season has no data, or the 
-            variable is not found in the dataset.
-            
-        Examples
-        --------
-        >>> ts = TimeSeries("climate_data.nc")
-        >>> # Plot global mean temperature at 850 hPa for winter season
-        >>> ts.plot_time_series(
-        ...     level=850,
-        ...     variable="air",
-        ...     season="djf"
-        ... )
-        
-        >>> # Plot temperature for a specific region and time period
-        >>> ts.plot_time_series(
-        ...     latitude=slice(-15, 15),   # 15°S to 15°N
-        ...     longitude=slice(40, 100),  # 40°E to 100°E
-        ...     level=500,                 # 500 hPa
-        ...     time_range=slice('2000', '2020'),
-        ...     variable="air"
-        ... )
-            
-        Notes
-        -----
-        This method applies cosine latitude weighting to properly account
-        for the decreasing grid cell area toward the poles when calculating
-        spatial averages.
-        """
+        else:
+            print(f"Warning: Unknown season '{season}'. Returning unfiltered data.")
+            return data_subset
+
+    def _select_process_data(self, variable, latitude=None, longitude=None, level=None, time_range=None, season='annual', year=None):
+        """Helper to select, filter, and process data up to variable level."""
         if self.dataset is None:
-            raise ValueError("No dataset available for plotting. Please load data first.")
-        
-        data = self._filter_by_season(season)
-        
-        if year is not None:
-            data = data.sel(time=data.time.dt.year == year)
-            
-        if 'time' in data.dims and len(data.time) == 0:
-            raise ValueError(f"No data available for season '{season}' in the dataset.")
-        
-        if variable not in list(data.data_vars):
-            raise ValueError(f"Variable '{variable}' not found in dataset. Available variables: {list(data.data_vars)}")
+            raise ValueError("No dataset available. Load data first.")
 
-        # Set default level if None and level dimension exists
-        if level is None and 'level' in data.dims and len(data.level) > 0:
-            level = data.level.values[0]
+        # Start with the full dataset
+        data_filtered = self.dataset
 
-        if latitude is not None:
-            data = data.sel(lat=latitude, method='nearest' if isinstance(latitude, (int, float)) else None)
+        # --- Seasonal Filtering ---
+        # Apply seasonal filter first if 'time' exists
+        if 'time' in data_filtered.dims:
+             data_filtered = self._filter_by_season(data_filtered, season)
+             if data_filtered.time.size == 0:
+                 raise ValueError(f"No data available for season '{season}'.")
+             # Filter by specific year if requested
+             if year is not None:
+                 data_filtered = data_filtered.sel(time=data_filtered.time.dt.year == year)
+                 if data_filtered.time.size == 0:
+                      raise ValueError(f"No data available for year {year} within season '{season}'.")
+        elif season.lower() != 'annual':
+             print("Warning: Cannot filter by season - 'time' dimension not found.")
 
-        if longitude is not None:
-            data = data.sel(lon=longitude, method='nearest' if isinstance(longitude, (int, float)) else None)
+        # --- Variable Selection ---
+        if variable not in data_filtered.data_vars:
+            raise ValueError(f"Variable '{variable}' not found. Available: {list(data_filtered.data_vars)}")
+        data_var = data_filtered[variable] # Now work with the DataArray
 
-        if 'level' in data.dims:
+        # --- Spatial/Level/Time Selections ---
+        selection_dict = {}
+        method_dict = {}
+
+        if latitude is not None and 'lat' in data_var.coords:
+            selection_dict['lat'] = latitude
+            if isinstance(latitude, (int, float)): method_dict['lat'] = 'nearest'
+        if longitude is not None and 'lon' in data_var.coords:
+            selection_dict['lon'] = longitude
+            if isinstance(longitude, (int, float)): method_dict['lon'] = 'nearest'
+
+        # Handle level - apply selection to data_var
+        level_dim_name = next((dim for dim in ['level', 'lev'] if dim in data_var.dims), None)
+        level_processed = False # Flag if level mean was taken
+        if level_dim_name:
             if level is not None:
                 if isinstance(level, (slice, list, np.ndarray)):
-                    data = data.sel(level=level)
-                    data = data.mean(dim='level')
+                    # Average over selected levels *now*
+                    data_var = data_var.sel({level_dim_name: level}).mean(dim=level_dim_name)
+                    level_processed = True
+                elif isinstance(level, (int, float)):
+                    selection_dict[level_dim_name] = level
+                    method_dict[level_dim_name] = 'nearest'
                 else:
-                    data = data.sel(level=level)
-        elif 'lev' in data.dims:  
-            if level is not None:
-                if isinstance(level, (slice, list, np.ndarray)):
-                    data = data.sel(lev=level)
-                    data = data.mean(dim='lev')
-                else:
-                    data = data.sel(lev=level)
-        else:
-            print("Warning: Level dimension not found in dataset.")
+                    selection_dict[level_dim_name] = level
+            elif len(data_var[level_dim_name]) > 1:
+                 # Default to first level if multiple exist and none specified
+                 level_val = data_var[level_dim_name].values[0]
+                 selection_dict[level_dim_name] = level_val
+                 print(f"Warning: Multiple levels found. Using first level: {level_val}")
+        elif level is not None:
+             print(f"Warning: Level dimension not found. Ignoring 'level' parameter.")
 
-        if 'time' not in data.dims:
-            raise ValueError("Time dimension not found in dataset. Please load data with time dimension.")
-            
-        if time_range is not None:
-            data = data.sel(time=time_range)
-        
-        spatial_dims = []
-        if 'lat' in data.dims:
-            spatial_dims.append('lat')
-        if 'lon' in data.dims:
-            spatial_dims.append('lon')
-        
+        if time_range is not None and 'time' in data_var.dims:
+            selection_dict['time'] = time_range
+
+        # Apply remaining selections
+        if selection_dict:
+             data_var = data_var.sel(**selection_dict, method=method_dict if method_dict else None)
+
+        return data_var # Return the processed DataArray
+
+
+    def plot_time_series(self, latitude=None, longitude=None, level=None,
+                         time_range=None, variable='air', figsize=(16, 10), # Adjusted figsize
+                         season='annual', year=None, area_weighted=True):
+        """Plot area-weighted spatial mean time series."""
+
+        data_var = self._select_process_data(
+            variable, latitude, longitude, level, time_range, season, year
+        )
+
+        if 'time' not in data_var.dims:
+            raise ValueError("Time dimension not found in processed data for time series plot.")
+
+        # Calculate spatial mean (weighted or unweighted)
+        spatial_dims = [d for d in ['lat', 'lon'] if d in data_var.dims]
+        plot_data = None
+
         if spatial_dims:
-            weights = np.cos(np.deg2rad(data.lat))
-            plot_data = (data[variable] * weights).sum(dim=spatial_dims) / weights.sum()
+            if area_weighted and 'lat' in spatial_dims:
+                # Ensure weights only depend on latitude
+                weights = np.cos(np.deg2rad(data_var['lat']))
+                weights.name = "weights" # Assign a name for weighted operation
+                plot_data = data_var.weighted(weights).mean(dim=spatial_dims)
+                print("Calculating area-weighted spatial mean.")
+            else:
+                plot_data = data_var.mean(dim=spatial_dims)
+                weight_msg = "(unweighted)" if 'lat' in spatial_dims else ""
+                print(f"Calculating simple spatial mean {weight_msg}.")
         else:
-            plot_data = data[variable]
-            
-        if hasattr(data[variable], 'compute'):
+            # Data is already a time series (e.g., single point selected)
+            plot_data = data_var
+            print("Plotting time series for single point (no spatial average).")
+
+        # Compute if Dask array
+        if hasattr(plot_data, 'compute'):
+            print("Computing time series...")
             with ProgressBar():
                 plot_data = plot_data.compute()
 
+        # Plotting
         plt.figure(figsize=figsize)
-        ax = plot_data.plot()
-        
+        plot_data.plot() # Use xarray's built-in plotting
+
+        ax = plt.gca() # Get current axes
+        units = data_var.attrs.get("units", "")
+        long_name = data_var.attrs.get("long_name", variable)
+        ax.set_ylabel(f"{long_name} ({units})")
+        ax.set_xlabel('Time')
+
         season_display = season.upper() if season.lower() != 'annual' else 'Annual'
-        plt.title(f'{season_display} Time series of {variable}')
-        plt.xlabel('Time')
-        plt.ylabel(f'{variable} {data[variable].attrs.get("units", "")}')
-        plt.grid(True, linestyle='--', alpha=0.7)
+        year_display = f"for {year}" if year is not None else ""
+        weight_display = "Area-Weighted " if area_weighted and 'lat' in spatial_dims else ""
+        ax.set_title(f'{season_display} {weight_display}Spatial Mean Time Series {year_display}\nVariable: {variable}')
+
+        ax.grid(True, linestyle='--', alpha=0.7)
         plt.tight_layout()
-        
         return ax
-    
+
+
     def plot_std_space(self, latitude=None, longitude=None, level=None,
-                       time_range=None, variable='air', figsize=(20, 10),
-                       season='annual'):
-        """
-        Plot the spatial standard deviation time series of the selected variable.
-        
-        Creates a time series visualization showing how the spatial variability
-        (standard deviation across latitudes and longitudes) of the selected
-        variable changes over time.
-        
-        Parameters
-        ----------
-        latitude : float, slice, or array-like, optional
-            Latitude selection. Can be a specific value, a slice (e.g., 
-            slice(-30, 30) for 30°S to 30°N), or an array of values.
-        longitude : float, slice, or array-like, optional
-            Longitude selection. Can be a specific value, a slice (e.g.,
-            slice(0, 90) for 0° to 90°E), or an array of values.
-        level : float or int, optional
-            Pressure level selection in hPa or the unit used in the dataset.
-            If None, the first level is used if available.
-        time_range : slice or str, optional
-            Time range selection. Can be a slice (e.g., slice('2010', '2020'))
-            or a string format understood by xarray.
-        variable : str, optional
-            Variable name to plot (default: 'air' for air temperature)
-        figsize : tuple, optional
-            Figure size (width, height) in inches. Default is (20, 10).
-        season : str, optional
-            Season to plot. Options are:
-            - 'annual': All months (default)
-            - 'jjas': June, July, August, September (Northern Hemisphere summer)
-            - 'djf': December, January, February (Northern Hemisphere winter)
-            - 'mam': March, April, May (Northern Hemisphere spring)
-            
-        Returns
-        -------
-        matplotlib.axes.Axes
-            The axes object containing the plot, which can be further customized.
-            
-        Raises
-        ------
-        ValueError
-            If the dataset is not loaded, the season has no data, the variable
-            is not found, or there's no time dimension.
-            
-        Examples
-        --------
-        >>> ts = TimeSeries("climate_data.nc")
-        >>> # Plot spatial standard deviation of temperature
-        >>> ts.plot_std_space(
-        ...     level=850,
-        ...     variable="air",
-        ...     season="djf"
-        ... )
-        
-        >>> # Plot spatial variability for a specific region 
-        >>> ts.plot_std_space(
-        ...     latitude=slice(0, 45),     # 0° to 45°N
-        ...     longitude=slice(60, 120),  # 60°E to 120°E
-        ...     level=500,                 # 500 hPa
-        ...     variable="air",
-        ...     season="mam"               # March-April-May
-        ... )
-            
-        Notes
-        -----
-        This method calculates the standard deviation across spatial dimensions
-        (latitude and longitude) for each time point, providing insights into
-        how spatial variability changes over time.
-        """
-        if self.dataset is None:
-            raise ValueError("No dataset available for plotting. Please load data first.")
-        
-        data = self._filter_by_season(season)
-        
-        if 'time' in data.dims and len(data.time) == 0:
-            raise ValueError(f"No data available for season '{season}' in the dataset.")
-        
-        if variable not in list(data.data_vars):
-            raise ValueError(f"Variable '{variable}' not found in dataset. Available variables: {list(data.data_vars)}")
+                       time_range=None, variable='air', figsize=(16, 10), # Adjusted figsize
+                       season='annual', area_weighted=True):
+        """Plot time series of spatial standard deviation (weighted)."""
 
-        # Set default level if None and level dimension exists
-        if level is None and 'level' in data.dims and len(data.level) > 0:
-            level = data.level.values[0]
+        data_var = self._select_process_data(
+             variable, latitude, longitude, level, time_range, season
+        )
 
-        if latitude is not None:
-            data = data.sel(lat=latitude, method='nearest' if isinstance(latitude, (int, float)) else None)
+        if 'time' not in data_var.dims:
+            raise ValueError("Time dimension not found for spatial standard deviation plot.")
 
-        if longitude is not None:
-            data = data.sel(lon=longitude, method='nearest' if isinstance(longitude, (int, float)) else None)
+        spatial_dims = [d for d in ['lat', 'lon'] if d in data_var.dims]
+        plot_data = None
 
-        if 'level' in data.dims:
-            if level is not None:
-                if isinstance(level, (slice, list, np.ndarray)):
-                    data = data.sel(level=level)
-                    data = data.mean(dim='level')
-                else:
-                    data = data.sel(level=level)
-        elif 'lev' in data.dims:  
-            if level is not None:
-                if isinstance(level, (slice, list, np.ndarray)):
-                    data = data.sel(lev=level)
-                    data = data.mean(dim='lev')
-                else:
-                    data = data.sel(lev=level)
+        if not spatial_dims:
+             raise ValueError("No spatial dimensions ('lat', 'lon') found for calculating spatial standard deviation.")
+
+        # Calculate spatial standard deviation (weighted or unweighted)
+        if area_weighted and 'lat' in spatial_dims:
+            weights = np.cos(np.deg2rad(data_var['lat']))
+            weights.name = "weights"
+            plot_data = data_var.weighted(weights).std(dim=spatial_dims)
+            print("Calculating area-weighted spatial standard deviation.")
         else:
-            print("Warning: Level dimension not found in dataset.")
+            plot_data = data_var.std(dim=spatial_dims)
+            weight_msg = "(unweighted)" if 'lat' in spatial_dims else ""
+            print(f"Calculating simple spatial standard deviation {weight_msg}.")
 
-        if 'time' not in data.dims:
-            raise ValueError("Time dimension not found in dataset. Please load data with time dimension.")
-            
-        if time_range is not None:
-            data = data.sel(time=time_range)
-            
-        # Calculate the standard deviation over latitude and longitude
-        data = data.std(dim=['lat', 'lon'])
-        
-        if hasattr(data[variable], 'compute'):
+        # Compute if Dask array
+        if hasattr(plot_data, 'compute'):
+            print("Computing spatial standard deviation time series...")
             with ProgressBar():
-                data = data.compute()
+                plot_data = plot_data.compute()
 
+        # Plotting
         plt.figure(figsize=figsize)
-        ax = data[variable].plot()
-        
+        plot_data.plot()
+
+        ax = plt.gca()
+        units = data_var.attrs.get("units", "") # Std dev has same units
+        long_name = data_var.attrs.get("long_name", variable)
+        ax.set_ylabel(f"Spatial Std. Dev. ({units})")
+        ax.set_xlabel('Time')
+
         season_display = season.upper() if season.lower() != 'annual' else 'Annual'
-        plt.title(f'{season_display} Normalized Standard Deviation of {variable} over Latitude and Longitude')
-        plt.xlabel('Time')
-        plt.ylabel(f'Normalized {variable} Standard Deviation')
-        plt.grid(True, linestyle='--', alpha=0.7)
+        weight_display = "Area-Weighted " if area_weighted and 'lat' in spatial_dims else ""
+        ax.set_title(f'{season_display} Time Series of {weight_display}Spatial Standard Deviation\nVariable: {variable}')
+
+        ax.grid(True, linestyle='--', alpha=0.7)
         plt.tight_layout()
-        
         return ax
+
 
     def decompose_time_series(
         self,
@@ -418,199 +258,106 @@ class TimeSeries:
         longitude=None,
         time_range=None,
         season='annual',
-        stl_seasonal=13,
+        stl_seasonal=13, # Must be odd
         stl_period=12,
         area_weighted=True,
         plot_results=True,
-        figsize=(14, 12)
+        figsize=(16, 10) # Adjusted figsize
     ):
-        """
-        Decompose a climate time series into trend, seasonal, and residual components.
-        
-        Uses the Seasonal-Trend decomposition using LOESS (STL) method to separate
-        a climate time series into its constituent components. The method computes
-        a spatial average for the selected region with proper area weighting, then
-        performs the decomposition, extracting trend, seasonal cycle, and residual
-        components.
-        
-        Parameters
-        ----------
-        variable : str, optional
-            Variable name to analyze (default: 'air' for air temperature)
-        level : float or int, optional
-            Pressure level to analyze in hPa. If None, uses first available level.
-        latitude : float, slice, or array-like, optional
-            Latitude selection. Can be a specific value, a slice (e.g., 
-            slice(-30, 30) for 30°S to 30°N), or an array of values.
-        longitude : float, slice, or array-like, optional
-            Longitude selection. Can be a specific value, a slice (e.g.,
-            slice(0, 90) for 0° to 90°E), or an array of values.
-        time_range : slice or str, optional
-            Time range selection. Can be a slice (e.g., slice('2010', '2020'))
-            or a string format understood by xarray.
-        season : str, optional
-            Season to analyze. Options are:
-            - 'annual': All months (default)
-            - 'jjas': June, July, August, September (Northern Hemisphere summer)
-            - 'djf': December, January, February (Northern Hemisphere winter)
-            - 'mam': March, April, May (Northern Hemisphere spring)
-        stl_seasonal : int, optional
-            Length of the seasonal smoother in the STL decomposition (default: 13).
-            Higher values produce a smoother seasonal component.
-        stl_period : int, optional
-            Period of the seasonal component, default is 12 (annual cycle for monthly data).
-            Set according to the frequency of your data (e.g., 4 for quarterly, 12 for monthly).
-        area_weighted : bool, optional
-            Whether to apply area weighting when computing spatial means to account
-            for the decreasing grid cell area toward the poles (default: True).
-        plot_results : bool, optional
-            Whether to plot the decomposition results (default: True).
-        figsize : tuple, optional
-            Figure size if plotting results, default is (14, 12).
-        
-        Returns
-        -------
-        dict
-            Dictionary containing the decomposition components:
-            - 'original': Original time series
-            - 'trend': Trend component
-            - 'seasonal': Seasonal component
-            - 'residual': Residual component
-        matplotlib.figure.Figure, optional
-            Figure object if plot_results is True, containing four subplots
-            showing the original time series and its decomposed components.
-            
-        Raises
-        ------
-        ValueError
-            If the dataset is not loaded, the season has no data, or the
-            variable is not found in the dataset.
-            
-        Examples
-        --------
-        >>> ts = TimeSeries("climate_data.nc")
-        >>> # Decompose global mean temperature time series
-        >>> results, fig = ts.decompose_time_series(
-        ...     variable="air", 
-        ...     level=850,
-        ...     stl_period=12,  # For monthly data
-        ...     plot_results=True
-        ... )
-        >>> 
-        >>> # Access trend component
-        >>> trend = results['trend']
-        >>> 
-        >>> # Decompose regional time series without plotting
-        >>> results = ts.decompose_time_series(
-        ...     variable="air",
-        ...     latitude=slice(-30, 30),  # 30°S to 30°N
-        ...     longitude=slice(0, 360),  # Global longitude
-        ...     level=500,                # 500 hPa
-        ...     time_range=slice('1980', '2020'),
-        ...     season="annual",
-        ...     area_weighted=True,
-        ...     plot_results=False
-        ... )
-            
-        Notes
-        -----
-        The STL decomposition is particularly useful for climate data as it can
-        handle non-linear trends and seasonality that may change over time.
-        The 'residual' component often contains climate modes of variability
-        and extreme events after the trend and seasonal cycle are removed.
-        
-        
-        """
-        if self.dataset is None:
-            raise ValueError("No dataset available for analysis. Please load data first.")
-       
-        data = self._filter_by_season(season)
-            
-        if 'time' in data.dims and len(data.time) == 0:
-            raise ValueError(f"No data available for season '{season}' in the dataset.")
-        
-        if variable not in list(data.data_vars):
-            raise ValueError(f"Variable '{variable}' not found in dataset. Available variables: {list(data.data_vars)}")
-        
-        if latitude is not None:
-            data = data.sel(lat=latitude, method='nearest' if isinstance(latitude, (int, float)) else None)
+        """Decompose spatially averaged time series using STL."""
 
-        if longitude is not None:
-            data = data.sel(lon=longitude, method='nearest' if isinstance(longitude, (int, float)) else None)
-        
-        # Handle level selection
-        if 'level' in data.dims:
-            if level is None:
-                level = data.level.values[0]
-                print(f"No level specified, using first available level: {level}")
-            
-            data = data.sel(level=level)
-        elif 'lev' in data.dims:
-            if level is None:
-                level = data.lev.values[0]
-                print(f"No level specified, using first available level: {level}")
-            
-            data = data.sel(lev=level)
-        
-        if time_range is not None:
-            data = data.sel(time=time_range)
-        
-        if area_weighted and 'lat' in data.dims:
-            weights = np.cos(np.deg2rad(data.lat))
-            global_mean = (data[variable] * weights).sum(dim=['lat', 'lon']) / weights.sum()
+        data_var = self._select_process_data(
+             variable, latitude, longitude, level, time_range, season
+        )
+
+        if 'time' not in data_var.dims:
+            raise ValueError("Time dimension required for decomposition.")
+
+        units = data_var.attrs.get("units", "") # Get units BEFORE averaging
+        long_name = data_var.attrs.get("long_name", variable)
+
+        # --- Calculate Spatially Averaged Time Series ---
+        spatial_dims = [d for d in ['lat', 'lon'] if d in data_var.dims]
+        ts_mean = None
+
+        if spatial_dims:
+            if area_weighted and 'lat' in spatial_dims:
+                weights = np.cos(np.deg2rad(data_var['lat']))
+                weights.name = "weights"
+                ts_mean = data_var.weighted(weights).mean(dim=spatial_dims)
+                print("Calculating area-weighted spatial mean for decomposition.")
+            else:
+                ts_mean = data_var.mean(dim=spatial_dims)
+                print("Calculating simple spatial mean for decomposition.")
         else:
-            dims_to_avg = [d for d in ['lat', 'lon'] if d in data.dims]
-            global_mean = data[variable].mean(dim=dims_to_avg)
-        
-        if hasattr(global_mean, 'compute'):
+            ts_mean = data_var # Already a time series
+            print("Decomposing time series for single point.")
+
+        # Compute if Dask array
+        if hasattr(ts_mean, 'compute'):
+            print("Computing mean time series for decomposition...")
             with ProgressBar():
-                global_mean = global_mean.compute()
-                
-        ts_global = global_mean.to_pandas()
-        
-        stl_result = STL(ts_global, seasonal=stl_seasonal, period=stl_period).fit()
-        
-        trend = stl_result.trend
-        seasonal = stl_result.seasonal
-        residual = stl_result.resid
-        
-        # Storing results in dictionary
+                ts_mean = ts_mean.compute()
+
+        # Convert to pandas for STL, handle potential NaNs at ends
+        ts_pd = ts_mean.to_pandas().dropna()
+        if ts_pd.empty:
+            raise ValueError("Time series is empty or all NaN after processing and spatial averaging.")
+        if len(ts_pd) <= 2 * stl_period:
+            raise ValueError(f"Time series length ({len(ts_pd)}) is too short for the specified STL period ({stl_period}). Needs > 2*period.")
+
+        # --- Perform STL Decomposition ---
+        print(f"Performing STL decomposition (period={stl_period}, seasonal_smooth={stl_seasonal})...")
+        try:
+             # Ensure seasonal smoother length is odd
+            if stl_seasonal % 2 == 0:
+                 stl_seasonal += 1
+                 print(f"Adjusted stl_seasonal to be odd: {stl_seasonal}")
+            stl_result = STL(ts_pd, seasonal=stl_seasonal, period=stl_period).fit()
+        except Exception as e:
+             print(f"STL decomposition failed: {e}")
+             print("Check time series length, NaNs, and stl_period.")
+             raise
+
+        # Store results
         results = {
-            'original': ts_global,
-            'trend': trend,
-            'seasonal': seasonal,
-            'residual': residual
+            'original': stl_result.observed, # Use observed from STL result for consistency
+            'trend': stl_result.trend,
+            'seasonal': stl_result.seasonal,
+            'residual': stl_result.resid
         }
-        
+
+        # --- Plotting ---
         if plot_results:
+            print("Plotting decomposition results...")
             fig, axes = plt.subplots(4, 1, figsize=figsize, sharex=True)
-            
-            axes[0].plot(ts_global.index, ts_global.values)
-            axes[0].set_ylabel(f'{variable} ({data[variable].attrs.get("units", "")})')
-            level_info = f" at {level} hPa" if level is not None else ""
-            season_display = season.upper() if season.lower() != 'annual' else 'Annual'
-            axes[0].set_title(f'{season_display} Time Series - Global Mean {variable}{level_info}')
-            
-            # Trend component
-            axes[1].plot(ts_global.index, trend)
-            axes[1].set_ylabel('Trend')
-            axes[1].set_title('Long-term Trend Component')
-            
-            # Seasonal component
-            axes[2].plot(ts_global.index, seasonal)
-            axes[2].set_ylabel('Seasonal')
-            axes[2].set_title(f'Seasonal Component (Period={stl_period})')
-            
-            # Residual component
-            axes[3].plot(ts_global.index, residual)
-            axes[3].set_ylabel('Residual')
-            axes[3].set_title('Residual Component (Anomalies)')
-            
+
+            # Original (Observed)
+            axes[0].plot(results['original'].index, results['original'].values, label='Observed')
+            axes[0].set_ylabel(f"Observed ({units})")
+            title_prefix = f'{season.upper() if season.lower() != "annual" else "Annual"}'
+            level_info = f" at {level}" if level is not None else "" # Assuming level was single value or averaged before
+            axes[0].set_title(f'{title_prefix} Time Series Decomposition: {long_name}{level_info}')
+
+            # Trend
+            axes[1].plot(results['trend'].index, results['trend'].values, label='Trend')
+            axes[1].set_ylabel(f"Trend ({units})")
+
+            # Seasonal
+            axes[2].plot(results['seasonal'].index, results['seasonal'].values, label='Seasonal')
+            axes[2].set_ylabel(f"Seasonal ({units})")
+
+            # Residual
+            axes[3].plot(results['residual'].index, results['residual'].values, label='Residual', linestyle='-', marker='.', markersize=2, alpha=0.7)
+            axes[3].axhline(0, color='grey', linestyle='--', alpha=0.5) # Add zero line
+            axes[3].set_ylabel(f"Residual ({units})")
+            axes[3].set_xlabel("Time")
+
             for ax in axes:
-                ax.grid(True, linestyle='--', alpha=0.7)
-            
-            plt.tight_layout()
-            
+                ax.grid(True, linestyle='--', alpha=0.6)
+                ax.legend(loc='upper left', fontsize='small')
+
+            plt.tight_layout(rect=[0, 0.03, 1, 0.97]) # Adjust layout slightly for title
             return results, fig
-        
-        return results
+        else:
+            return results # Return only results dict if not plotting

@@ -48,7 +48,6 @@ class Plots:
         if 'time' not in data_subset.dims:
             raise ValueError("Cannot filter by season - 'time' dimension not found.")
 
-        # Get month coordinate safely
         if 'month' in data_subset.coords:
             month_coord = data_subset['month']
         elif np.issubdtype(data_subset['time'].dtype, np.datetime64):
@@ -174,7 +173,7 @@ class Plots:
         # Apply smoothing
         smoothed_data, was_smoothed = self._apply_gaussian_filter(mean_data, gaussian_sigma)
 
-        # --- Plotting with contourf ---
+        # --- Plotting with contourf because it gives better results---
         plt.figure(figsize=figsize)
         ax = plt.axes(projection=ccrs.PlateCarree())
         ax.coastlines()
