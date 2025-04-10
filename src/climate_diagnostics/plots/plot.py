@@ -1,5 +1,6 @@
 import xarray as xr
 import cartopy.crs as ccrs
+import cartopy.feature as cfeature
 import matplotlib.pyplot as plt
 import numpy as np
 from dask.diagnostics import ProgressBar
@@ -176,6 +177,7 @@ class Plots:
         # --- Plotting with contourf because it gives better results---
         plt.figure(figsize=figsize)
         ax = plt.axes(projection=ccrs.PlateCarree())
+        ax.add_feature(cfeature.BORDERS, linestyle='-', linewidth=1)
         ax.coastlines()
         gl = ax.gridlines(draw_labels=True, linestyle='--', alpha=0.5)
         gl.top_labels = False; gl.right_labels = False # Tidy labels
@@ -256,6 +258,7 @@ class Plots:
         # --- Plotting with contourf ---
         plt.figure(figsize=figsize)
         ax = plt.axes(projection=ccrs.PlateCarree())
+        ax.add_feature(cfeature.BORDERS, linestyle='-', linewidth=1)
         ax.coastlines()
         gl = ax.gridlines(draw_labels=True, linestyle='--', alpha=0.5)
         gl.top_labels = False; gl.right_labels = False
