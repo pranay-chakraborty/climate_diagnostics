@@ -1,5 +1,11 @@
 # Climate Diagnostics Toolkit
 
+![Python Version](https://img.shields.io/badge/python-3.11+-blue.svg)
+![License](https://img.shields.io/badge/license-MIT-green.svg)
+![Version](https://img.shields.io/badge/version-0.1.0-brightgreen.svg)
+![Status](https://img.shields.io/badge/status-alpha-orange.svg)
+
+
 A Python package for analyzing and visualizing climate data from NetCDF files with a focus on time series analysis and spatial pattern visualization.
 
 ## Overview
