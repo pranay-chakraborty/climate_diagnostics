@@ -230,15 +230,16 @@ class Plots:
             variable, latitude, longitude, level, time_range
         )
 
-        # Filter by season
+       # Filter by season
         if 'time' not in selected_data.dims:
              raise ValueError("Standard deviation requires 'time' dimension.")
         data_season = self._filter_by_season(selected_data, season)
 
         if data_season.size == 0:
             raise ValueError(f"No data after selections and season filter ('{season}').")
-        if data_season.dims['time'] < 2:
-             raise ValueError(f"Std dev requires > 1 time point (found {data_season.dims['time']}).")
+        if data_season.sizes['time'] < 2:
+             raise ValueError(f"Std dev requires > 1 time point (found {data_season.sizes['time']}).")
+
 
         # Compute standard deviation over time
         if data_season.chunks:
