@@ -8,6 +8,10 @@ import pandas as pd
 from statsmodels.tsa.seasonal import STL
 import warnings
 from scipy import stats
+import cartopy.crs as ccrs
+import cartopy.feature as cfeature
+from dask.distributed import Client, LocalCluster 
+import os
 
 
 class Trends:
@@ -629,3 +633,266 @@ class Trends:
             return results
         else:
             return None
+        
+    def calculate_spatial_trends(self,
+                           variable='air',
+                           latitude=slice(None, None),
+                           longitude=slice(None, None),
+                           time_range=slice(None, None),
+                           level=None,
+                           season='annual',
+                           frequency='M',  # Frequency parameter
+                           num_years=1,    # New parameter for time period
+                           n_workers=4,
+                           robust_stl=True,
+                           period=12,
+                           plot_map=True,
+                           save_plot_path=None):
+        """
+        Calculates and plots spatial trends using STL decomposition for each grid point.
+
+        This method computes trends at each grid point within the specified region using 
+        Seasonal-Trend decomposition by LOESS (STL) and parallelizes the computation with Dask.
+        The result is a spatial map of trends (e.g., °C per year, decade, etc.).
+
+        Parameters
+        ----------
+        variable : str, default='air'
+            Variable name to analyze trends for
+        latitude : slice, optional
+            Latitude slice for region selection. Default is all latitudes.
+        longitude : slice, optional
+            Longitude slice for region selection. Default is all longitudes.
+        time_range : slice, optional
+            Time slice for analysis period. Default is all times.
+        level : float, int, or None, optional
+            Vertical level selection. If None and multiple levels exist, defaults to first level.
+        season : str, default='annual'
+            Season to analyze: 'annual', 'jjas' (Jun-Sep), 'djf' (Dec-Feb), 'mam' (Mar-May), etc.
+        frequency : str, default='M'
+            Time frequency of data: 'M' (monthly), 'D' (daily), or 'Y' (yearly).
+            Used for proper scaling of trend rates.
+        num_years : int, default=1
+            Number of years over which to express the trend (e.g., 1=per year, 10=per decade).
+        n_workers : int, default=4
+            Number of Dask workers for parallel computation
+        robust_stl : bool, default=True
+            Use robust STL fitting to reduce impact of outliers
+        period : int, default=12
+            Period for STL decomposition (12 for monthly data, 365 for daily data)
+        plot_map : bool, default=True
+            Whether to generate and show the trend map plot
+        save_plot_path : str, optional
+            Path to save the plot image. If None, plot is shown but not saved.
+
+        Returns
+        -------
+        xarray.DataArray
+            Computed trends (in units per specified time period)
+            Returns None if an error occurs during processing
+        """
+        
+        if self.dataset is None:
+            raise ValueError("Dataset not loaded.")
+        if variable not in self.dataset.variables:
+            raise ValueError(f"Variable '{variable}' not found.")
+
+        # Format the time period string for labels
+        if num_years == 1:
+            period_str = "year"
+        elif num_years == 10:
+            period_str = "decade"
+        else:
+            period_str = f"{num_years} years"
+
+        # Get coordinate names
+        lat_coord = self._get_coord_name(['lat', 'latitude'])
+        lon_coord = self._get_coord_name(['lon', 'longitude'])
+        level_coord = self._get_coord_name(['level', 'lev', 'plev', 'zlev'])
+        time_coord = self._get_coord_name(['time'])
+        
+        if not all([lat_coord, lon_coord, time_coord]):
+            raise ValueError("Dataset must contain recognizable time, latitude, and longitude coordinates.")
+
+        # --- Dask Client Setup ---
+        try:
+            cluster = LocalCluster(n_workers=n_workers, threads_per_worker=1)
+            client = Client(cluster)
+            print(f"Dask client started: {client.dashboard_link}")
+            
+            # --- Data Selection and Seasonal Filtering ---
+            data_var = self.dataset[variable]
+            
+            # Apply time range selection if provided
+            if time_range is not None:
+                data_var = data_var.sel(time=time_range)
+            
+            # Handle level selection
+            level_selection_info = ""
+            if level_coord in data_var.dims:
+                if level is None:
+                    # Default to first level
+                    level = data_var[level_coord].values[0]
+                    print(f"Defaulting to first level: {level}")
+                    level_selection_info = f"Level={level} (defaulted)"
+                
+                data_var = data_var.sel({level_coord: level}, method='nearest')
+                level_selection_info = f"Level={data_var[level_coord].values.item()}"
+                print(f"Selected level: {data_var[level_coord].values.item()}")
+            
+            # Apply seasonal filtering
+            data_var = self._filter_by_season(data_var, season=season, time_coord_name=time_coord)
+            if len(data_var[time_coord]) < 2 * period:
+                raise ValueError(f"Insufficient time points ({len(data_var[time_coord])}) after filtering for season '{season}'. Need at least {2 * period}.")
+            
+            # Apply spatial selection
+            data_var = data_var.sel({lat_coord: latitude, lon_coord: longitude})
+            
+            print(f"Data selected: {data_var.sizes}")
+            
+            # --- Trend Calculation Function ---
+            def apply_stl_slope(da):
+                if hasattr(da, 'values'):
+                    values = da.values
+                else:
+                    values = da # Assume numpy array if not xarray
+
+                values = np.asarray(values).squeeze()
+
+                # Check for sufficient data and NaNs before STL
+                min_periods = 2 * period
+                if values.ndim == 0 or len(values) < min_periods or np.isnan(values).all():
+                    return np.nan
+                if np.isnan(values).any():
+                    if np.sum(~np.isnan(values)) < min_periods:
+                        return np.nan
+
+                try:
+                    # Apply STL
+                    stl_result = STL(values, period=period, robust=robust_stl).fit()
+                    trend = stl_result.trend
+
+                    # Check trend for NaNs
+                    if np.isnan(trend).all():
+                        return np.nan
+
+                    # Fit linear trend only to non-NaN trend values
+                    valid_indices = ~np.isnan(trend)
+                    if np.sum(valid_indices) < 2:
+                        return np.nan
+
+                    x = np.arange(len(trend))
+                    slope, _ = np.polyfit(x[valid_indices], trend[valid_indices], 1)
+
+                    # Use the provided frequency parameter instead of detection
+                    if frequency.upper() == 'M':
+                        # Monthly data - multiply by 12 (months per year)
+                        slope_per_year = slope * 12
+                    elif frequency.upper() == 'D':
+                        # Daily data - multiply by 365.25 (days per year)
+                        slope_per_year = slope * 365.25
+                    elif frequency.upper() == 'Y' or frequency.upper() == 'A':
+                        # Yearly data - keep as is
+                        slope_per_year = slope
+                    else:
+                        # Default for other frequencies (assume monthly)
+                        slope_per_year = slope * 12
+                        print(f"Using default conversion for frequency '{frequency}'. Assuming monthly data.")
+                    
+                    # Multiply by num_years to get trend over specified period
+                    slope_per_period = slope_per_year * num_years
+                    
+                    return slope_per_period
+                except Exception:
+                    return np.nan
+
+            # --- Parallel Computation using Dask ---
+            # Ensure the time dimension is a single chunk for apply_ufunc
+            data_var = data_var.chunk({time_coord: -1, lat_coord: 'auto', lon_coord: 'auto'})
+
+            print("Computing trends in parallel with xarray...")
+            trend_result = xr.apply_ufunc(
+                apply_stl_slope,
+                data_var,
+                input_core_dims=[[time_coord]],
+                vectorize=True,
+                dask='parallelized',
+                output_dtypes=[float],
+                dask_gufunc_kwargs={'allow_rechunk': True}
+            ).rename(f"{variable}_trend_per_{period_str}")
+
+            # Compute the result with a progress bar
+            with ProgressBar():
+                trend_computed = trend_result.compute()
+            print("Trend computation complete.")
+
+            # --- Plotting ---
+            if plot_map:
+                print("Generating plot...")
+                # Get time range for the title
+                try:
+                    start_time = data_var[time_coord].min().dt.strftime('%Y-%m').item()
+                    end_time = data_var[time_coord].max().dt.strftime('%Y-%m').item()
+                    time_period_str = f"{start_time} to {end_time}"
+                except Exception:
+                    time_period_str = "Selected Time Period"
+
+                units = data_var.attrs.get('units', '')
+                var_name = data_var.attrs.get('long_name', variable)
+                cbar_label = f"{var_name} trend per {period_str} ({units})" if units else f"{var_name} trend per {period_str}"
+
+                try:
+                    # --- Cartopy Plot ---
+                    fig = plt.figure(figsize=(12, 8))
+                    ax = fig.add_subplot(1, 1, 1, projection=ccrs.PlateCarree())
+
+                    contour = trend_computed.plot.contourf(
+                        ax=ax,
+                        transform=ccrs.PlateCarree(),
+                        cmap='RdBu_r',
+                        robust=True,
+                        levels=40,
+                        extend='both',
+                        cbar_kwargs={'label': cbar_label}
+                    )
+                    contour.colorbar.set_label(cbar_label, size=14)
+                    contour.colorbar.ax.tick_params(labelsize=14)
+
+                    ax.coastlines()
+                    ax.add_feature(cfeature.BORDERS, linestyle=':')
+                    gl = ax.gridlines(draw_labels=True, linewidth=1, color='gray', alpha=0.5, linestyle='--')
+                    gl.top_labels = False
+                    gl.right_labels = False
+                    gl.xlabel_style = {'size': 14}
+                    gl.ylabel_style = {'size': 14}
+
+                    # Create title
+                    season_str = season.upper() if season.lower() != 'annual' else 'Annual'
+                    title = f"{season_str} {var_name.capitalize()} Trends ({units} per {period_str})\n{time_period_str}"
+                    if level_selection_info:
+                        title += f"\n{level_selection_info}"
+                    ax.set_title(title, fontsize=14)
+
+                    plt.tight_layout()
+
+                    if save_plot_path:
+                        plt.savefig(save_plot_path, dpi=300, bbox_inches='tight')
+                        print(f"Plot saved to {save_plot_path}")
+                    plt.show()
+
+                except Exception as plot_err:
+                    print(f"An error occurred during plotting: {plot_err}")
+
+            return trend_computed
+
+        except Exception as e:
+            print(f"An error occurred during processing: {e}")
+            return None
+        finally:
+            # --- Dask Client Shutdown ---
+            if 'client' in locals() and client is not None:
+                print("Shutting down Dask client...")
+                client.close()
+                if 'cluster' in locals() and cluster is not None:
+                    cluster.close()
+                print("Dask client closed.")
