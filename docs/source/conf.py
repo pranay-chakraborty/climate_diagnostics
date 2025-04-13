@@ -65,7 +65,7 @@ intersphinx_timeout = 5
 # -- Options for HTML output -------------------------------------------------
 html_theme = 'sphinx_rtd_theme'
 html_static_path = ['_static']
-# html_logo = "_static/logo.png" # to add logo
+html_logo = "_static/WeCLiMb_LOGO_1.png" # to add logo
 #html_theme_options = {} 
 html_show_sphinx = False
 html_show_copyright = True
