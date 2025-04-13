@@ -204,15 +204,52 @@ class PlotsAccessor:
         plt.colorbar(im, label=cbar_label, orientation='vertical', pad=0.05, shrink=0.8)
 
         # Add Title
-        title = f'{season.upper() if season.lower() != "annual" else "Annual"} Mean {variable.capitalize()}'
-        if level_op == 'single_selected' and level is not None:
-            level_unit = smoothed_data.coords[level_dim_name].attrs.get('units', '') if level_dim_name else ''
-            title += f' at {level} {level_unit}'
+        season_map = {
+        'annual': "Annual",
+        'djf': "Winter (DJF)",
+        'mam': "Spring (MAM)",
+        'jja': "Summer (JJA)", 
+        'jjas': "Summer Monsoon (JJAS)",
+        'son': "Autumn (SON)"
+        }
+        season_str = season_map.get(season.lower(), season.upper())
+
+        # Format variable name nicely
+        var_name = variable.replace('_', ' ').capitalize()
+
+        # Base title
+        title = f"{season_str} Mean of {var_name}"
+
+        # Add level information
+        if level_op == 'single_selected' and level_dim_name:
+            # Get the actual selected level value after selection with 'nearest' method
+            actual_level = smoothed_data[level_dim_name].values.item()
+            level_unit = smoothed_data[level_dim_name].attrs.get('units', '')
+            title += f"\nLevel={actual_level} {level_unit}"
         elif level_op == 'range_selected':
-             title += ' (Level Mean)'
+            title += " (Level Mean)"
+
+        
+        try:
+            # Extract directly from the data
+            start_time = data_season['time'].min().dt.strftime('%Y').item()
+            end_time = data_season['time'].max().dt.strftime('%Y').item()
+            time_str = f"\n({start_time}-{end_time})"
+            title += time_str
+        except Exception as e:
+            # Fallback to parameter-based approach if possible
+            if time_range is not None and hasattr(time_range, 'start') and hasattr(time_range, 'stop'):
+                try:
+                    time_str = f"\n({time_range.start.strftime('%Y')}-{time_range.stop.strftime('%Y')})"
+                    title += time_str
+                except (AttributeError, TypeError):
+                    pass  # Skip if this approach fails too
+
+        # Add smoothing info
         if was_smoothed:
-            title += f' (Smoothed σ={gaussian_sigma})'
-        ax.set_title(title, fontsize=12) # Slightly smaller title
+            title += f"\nGaussian Smoothed (σ={gaussian_sigma})"
+
+        ax.set_title(title, fontsize=12)
 
         # Set extent from data - adjust if needed
         try:
@@ -309,14 +346,55 @@ class PlotsAccessor:
         plt.colorbar(im, label=cbar_label, orientation='vertical', pad=0.05, shrink=0.8)
 
         # Title
-        title = f'{season.upper() if season.lower() != "annual" else "Annual"} Std. Dev. of {variable.capitalize()}'
-        if level_op == 'single_selected' and level is not None:
-            level_unit = smoothed_data.coords[level_dim_name].attrs.get('units', '') if level_dim_name else ''
-            title += f' at {level} {level_unit}'
+        # Create more descriptive title
+        # Format season name
+        season_map = {
+            'annual': "Annual",
+            'djf': "Winter (DJF)",
+            'mam': "Spring (MAM)",
+            'jja': "Summer (JJA)", 
+            'jjas': "Summer Monsoon (JJAS)",
+            'son': "Autumn (SON)"
+        }
+        season_str = season_map.get(season.lower(), season.upper())
+
+        # Format variable name nicely
+        var_name = variable.replace('_', ' ').capitalize()
+
+        # Base title
+        title = f"{season_str} Standard Deviation of {var_name}"
+
+        # Add level information
+        # Add level information
+        if level_op == 'single_selected' and level_dim_name:
+            # Get the actual selected level value after selection with 'nearest' method
+            actual_level = smoothed_data[level_dim_name].values.item()
+            level_unit = smoothed_data[level_dim_name].attrs.get('units', '')
+            title += f"\nLevel={actual_level} {level_unit}"
         elif level_op == 'range_selected':
-            title += ' (Level Mean)'
+            title += " (Level Mean)"
+
+        # Add time range if available
+        # Add time range information
+        try:
+            # Extract directly from the data
+            start_time = data_season['time'].min().dt.strftime('%Y').item()
+            end_time = data_season['time'].max().dt.strftime('%Y').item()
+            time_str = f"\n({start_time}-{end_time})"
+            title += time_str
+        except Exception as e:
+            # Fallback to parameter-based approach if possible
+            if time_range is not None and hasattr(time_range, 'start') and hasattr(time_range, 'stop'):
+                try:
+                    time_str = f"\n({time_range.start.strftime('%Y')}-{time_range.stop.strftime('%Y')})"
+                    title += time_str
+                except (AttributeError, TypeError):
+                    pass  # Skip if this approach fails too
+
+        # Add smoothing info
         if was_smoothed:
-            title += f' (Smoothed σ={gaussian_sigma})'
+            title += f"\nGaussian Smoothed (σ={gaussian_sigma})"
+
         ax.set_title(title, fontsize=12)
 
         try:
