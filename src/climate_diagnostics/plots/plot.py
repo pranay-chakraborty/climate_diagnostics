@@ -114,8 +114,16 @@ class PlotsAccessor:
             print("Warning: Level dimension not found. Ignoring 'level' parameter.")
 
         # Perform selection
-        selected_data = data_var.sel(**selection_dict, method=method_dict if method_dict else None)
-
+        selected_data = data_var
+        for dim, method in method_dict.items():
+            if dim in selection_dict:
+                selected_data = selected_data.sel({dim: selection_dict[dim]}, method=method)
+                del selection_dict[dim]  
+        
+        
+        if selection_dict:
+            selected_data = selected_data.sel(selection_dict)
+            
         return selected_data, level_dim_name, level_op
 
 
