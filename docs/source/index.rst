@@ -3,15 +3,61 @@
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-Climate Diagnostics Toolkit documentation
+Climate Diagnostics Toolkit Documentation
 =========================================
 
-Add your content using ``reStructuredText`` syntax. See the
-`reStructuredText <https://www.sphinx-doc.org/en/master/usage/restructuredtext/index.html>`_
-documentation for details.
+Welcome to the Climate Diagnostics Toolkit documentation!
+
+Overview
+--------
+
+The Climate Diagnostics Toolkit is a comprehensive Python library designed for analyzing, processing, and visualizing climate data from various sources including model simulations, reanalysis products, and observational datasets. Built on top of xarray, this toolkit extends its functionality through specialized accessors that seamlessly integrate with your existing data workflows.
+
+Key Features
+------------
+
+* **Temporal Analysis**: Robust tools for trend detection, time series decomposition, and variability analysis
+* **Spatial Visualization**: Publication-quality maps with customized projections and spatial averaging capabilities
+* **Statistical Diagnostics**: Advanced statistical methods tailored for climate science applications
+* **Multi-model Analysis**: Tools for comparing and evaluating climate model outputs
+* **Performance Optimization**: Support for Dask-powered parallel processing of large datasets
+
+Core Components
+---------------
+
+The toolkit provides three main xarray accessors:
+
+* **climate_plots**: Geographic visualization with support for seasonal filtering, level selection, and area-weighted statistics
+* **climate_timeseries**: Time series analysis including STL decomposition, spatial averaging, and temporal filtering
+* **climate_trends**: Trend calculation and significance testing with robust visualization options
+
+Getting Started
+---------------
+
+.. code-block:: python
+
+   import xarray as xr
+   from climate_diagnostics import accessors
+   # Open a dataset
+   ds = xr.open_dataset("era5_monthly_temperature.nc")
+
+   # Create a visualization
+   ds.climate_plots.plot_mean(variable="t2m", season="djf")
+
+   # Analyze trends
+   ds.climate_trends.calculate_spatial_trends(variable="t2m", num_years=10)
 
 
 .. toctree::
    :maxdepth: 2
    :caption: Contents:
 
+   API Reference <modules>
+
+
+Indices and tables
+==================
+
+* :ref:`genindex`
+* :ref:`modindex`
+* :ref:`search`
