@@ -142,9 +142,18 @@ class Plots:
         return selected_data, level_dim_name, level_op
 
 
-    def plot_mean(self, variable='air', latitude=None, longitude=None, level=None,
-                  time_range=None, season='annual', gaussian_sigma=None,
-                  figsize=(16, 10), cmap='coolwarm', levels=15): # Added levels arg
+    def plot_mean(self, 
+                  variable='air', 
+                  latitude=None, 
+                  longitude=None, 
+                  level=None,
+                  time_range=None, 
+                  season='annual', 
+                  gaussian_sigma=None,
+                  figsize=(16, 10), 
+                  cmap='coolwarm',
+                  land_only = False,
+                  levels=30): 
         """Plot spatial mean using contourf, optionally smoothed."""
         selected_data, level_dim_name, level_op = self._select_data(
             variable, latitude, longitude, level, time_range
@@ -174,11 +183,21 @@ class Plots:
         # Apply smoothing
         smoothed_data, was_smoothed = self._apply_gaussian_filter(mean_data, gaussian_sigma)
 
-        # --- Plotting with contourf because it gives better results---
+       # --- Plotting with contourf because it gives better results---
         plt.figure(figsize=figsize)
         ax = plt.axes(projection=ccrs.PlateCarree())
-        ax.add_feature(cfeature.BORDERS, linestyle='-', linewidth=1)
-        ax.coastlines()
+        
+        # Add geographic features
+        if land_only:
+            # Add borders first with higher zorder
+            ax.add_feature(cfeature.BORDERS, linestyle='--', linewidth=1, zorder=3)
+            # Add coastlines with higher zorder
+            ax.coastlines(zorder=3)
+        else:
+            # Standard display without ocean masking
+            ax.add_feature(cfeature.BORDERS, linestyle='--', linewidth=1)
+            ax.coastlines()
+            
         gl = ax.gridlines(draw_labels=True, linestyle='--', alpha=0.5)
         gl.top_labels = False; gl.right_labels = False # Tidy labels
 
@@ -196,6 +215,11 @@ class Plots:
         im = ax.contourf(lon_coords, lat_coords, plot_data_np,
                          levels=levels, cmap=cmap, # Use specified levels
                          transform=ccrs.PlateCarree(), extend='both')
+                         
+        # Add ocean mask if land_only is True
+        if land_only:
+            # Mask out oceans with white color
+            ax.add_feature(cfeature.OCEAN, zorder=2, facecolor='white')
 
         # Add Colorbar
         unit_label = smoothed_data.attrs.get('units', '')
@@ -222,9 +246,18 @@ class Plots:
         return ax
 
 
-    def plot_std_time(self, variable='air', latitude=None, longitude=None, level=None,
-                      time_range=None, season='annual', gaussian_sigma=None,
-                      figsize=(16,10), cmap='viridis', levels=15): # Added levels arg
+    def plot_std_time(self, 
+                      variable='air', 
+                      latitude=None, 
+                      longitude=None, 
+                      level=None,
+                      time_range=None, 
+                      season='annual', 
+                      gaussian_sigma=None,
+                      figsize=(16,10), 
+                      cmap='viridis', 
+                      land_only = False,
+                      levels=30): # Added levels arg
         """Plot temporal standard deviation using contourf, optionally smoothed."""
         selected_data, level_dim_name, level_op = self._select_data(
             variable, latitude, longitude, level, time_range
@@ -257,10 +290,21 @@ class Plots:
         smoothed_data, was_smoothed = self._apply_gaussian_filter(std_data, gaussian_sigma)
 
         # --- Plotting with contourf ---
+               # --- Plotting with contourf ---
         plt.figure(figsize=figsize)
         ax = plt.axes(projection=ccrs.PlateCarree())
-        ax.add_feature(cfeature.BORDERS, linestyle='-', linewidth=1)
-        ax.coastlines()
+        
+        # Add geographic features
+        if land_only:
+            # Add borders first with higher zorder
+            ax.add_feature(cfeature.BORDERS, linestyle='--', linewidth=1, zorder=3)
+            # Add coastlines with higher zorder
+            ax.coastlines(zorder=3)
+        else:
+            # Standard display without ocean masking
+            ax.add_feature(cfeature.BORDERS, linestyle='--', linewidth=1)
+            ax.coastlines()
+            
         gl = ax.gridlines(draw_labels=True, linestyle='--', alpha=0.5)
         gl.top_labels = False; gl.right_labels = False
 
@@ -269,13 +313,18 @@ class Plots:
         plot_data_np = smoothed_data.values
 
         if np.all(np.isnan(plot_data_np)):
-             print("Warning: Data is all NaN after calculations. Cannot plot contours.")
-             ax.set_title(f'{variable.capitalize()} Std Dev - Data is all NaN')
-             return ax
+            print("Warning: Data is all NaN after calculations. Cannot plot contours.")
+            ax.set_title(f'{variable.capitalize()} Std Dev - Data is all NaN')
+            return ax
 
         im = ax.contourf(lon_coords, lat_coords, plot_data_np,
                          levels=levels, cmap=cmap, # Use specified levels
                          transform=ccrs.PlateCarree(), extend='both')
+                         
+        # Add ocean mask if land_only is True
+        if land_only:
+            # Mask out oceans with white color
+            ax.add_feature(cfeature.OCEAN, zorder=2, facecolor='white')
 
         # Colorbar
         unit_label = smoothed_data.attrs.get('units', '') # Std dev has same units

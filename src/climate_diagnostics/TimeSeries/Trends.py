@@ -647,6 +647,7 @@ class Trends:
                            robust_stl=True,
                            period=12,
                            plot_map=True,
+                           land_only = False,
                            save_plot_path=None):
         """
         Calculates and plots spatial trends using STL decomposition for each grid point.
@@ -858,14 +859,23 @@ class Trends:
                     contour.colorbar.set_label(cbar_label, size=14)
                     contour.colorbar.ax.tick_params(labelsize=14)
 
-                    ax.coastlines()
-                    ax.add_feature(cfeature.BORDERS, linestyle=':')
+                    # Add geographic features
+                    if land_only:
+                        # Add OCEAN feature to mask out oceans when land_only=True
+                        ax.add_feature(cfeature.OCEAN, zorder=2, facecolor='white')
+                        ax.coastlines(zorder=3)  # Ensure coastlines are drawn on top
+                        ax.add_feature(cfeature.BORDERS, linestyle=':', zorder=3)  # Borders on top too
+                    else:
+                        # Standard display without ocean masking
+                        ax.coastlines()
+                        ax.add_feature(cfeature.BORDERS, linestyle=':')
+                    
                     gl = ax.gridlines(draw_labels=True, linewidth=1, color='gray', alpha=0.5, linestyle='--')
                     gl.top_labels = False
                     gl.right_labels = False
                     gl.xlabel_style = {'size': 14}
                     gl.ylabel_style = {'size': 14}
-
+                    
                     # Create title
                     season_str = season.upper() if season.lower() != 'annual' else 'Annual'
                     title = f"{season_str} {var_name.capitalize()} Trends ({units} per {period_str})\n{time_period_str}"
