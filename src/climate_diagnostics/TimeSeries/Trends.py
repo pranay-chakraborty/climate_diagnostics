@@ -236,7 +236,7 @@ class TrendsAccessor:
             - region_details: metadata about variable, season, and level
             - stl_period: period used for STL decomposition
             - trend_statistics: pandas.DataFrame with regression statistics including:
-                - slope, intercept, p_value, r_value, r_squared, standard_error
+            - slope, intercept, p_value, r_value, r_squared, standard_error
             
         Raises
         ------
