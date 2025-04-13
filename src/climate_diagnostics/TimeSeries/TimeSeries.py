@@ -4,42 +4,61 @@ import numpy as np
 from dask.diagnostics import ProgressBar
 from statsmodels.tsa.seasonal import STL
 
-class TimeSeries:
+@xr.register_dataset_accessor("climate_timeseries")
+class TimeSeriesAccessor:
     """
-    Analyze and visualize time series from climate data, including
-    weighted spatial averaging/std dev and STL decomposition.
+    Accessor for analyzing and visualizing climate time series from xarray datasets.
+    
+    Provides methods for weighted spatial averaging, STL decomposition, and time series visualization.
+    
+    Examples
+    --------
+    >>> import xarray as xr
+    >>> from climate_diagnostics import register_accessors
+    >>> ds = xr.open_dataset("climate_data.nc")
+    >>> ds.climate.plot_time_series(variable="air", latitude=slice(30, 60))
+    >>> decomp = ds.climate.decompose_time_series(variable="air", level=850)
     """
 
-    def __init__(self, filepath=None):
-        """Initialize and load data."""
-        self.filepath = filepath
-        self.dataset = None
-        self._load_data()
+    def __init__(self, xarray_obj):
+        """
+        Initialize the accessor with the provided xarray Dataset.
+        
+        Parameters
+        ----------
+        xarray_obj : xarray.Dataset
+            The Dataset object this accessor is attached to
+        """
+        self._obj = xarray_obj
 
-    def _load_data(self):
-        """Load dataset using xarray with dask chunks."""
-        try:
-            if self.filepath:
-                with xr.set_options(keep_attrs=True):
-                    self.dataset = xr.open_dataset(self.filepath, chunks='auto', engine='netcdf4')
-                print(f"Dataset loaded from {self.filepath}")
-                try:
-                    self.dataset = self.dataset.rename({'latitude': 'lat', 'longitude': 'lon'})
-                except ValueError:
-                    pass
-                if 'lat' not in self.dataset.coords or 'lon' not in self.dataset.coords:
-                    print("Warning: Standard 'lat'/'lon' coordinates not found.")
-            else:
-                print("No filepath provided during initialization.")
-        except FileNotFoundError:
-             print(f"Error: File not found at {self.filepath}")
-             self.dataset = None
-        except Exception as e:
-            print(f"Error loading data from {self.filepath}: {e}")
-            self.dataset = None
+    
 
     def _filter_by_season(self, data_subset, season='annual'):
-        """Filter data subset by meteorological season."""
+        """
+         Filter data subset by meteorological season.
+    
+        Parameters
+        ----------
+        data_subset : xarray.Dataset or xarray.DataArray
+            Data to be filtered by season
+        season : str, default 'annual'
+            Meteorological season to filter by. Options:
+            - 'annual': All seasons (no filtering)
+            - 'jjas': June, July, August, September (summer monsoon)
+            - 'djf': December, January, February (winter)
+            - 'mam': March, April, May (spring)
+            - 'son': September, October, November (fall)
+        
+        Returns
+        -------
+        xarray.Dataset or xarray.DataArray
+            Filtered data containing only the specified season
+            
+        Raises
+        ------
+        ValueError
+            If time dimension is missing or months cannot be determined
+        """
         if season.lower() == 'annual':
             return data_subset
         if 'time' not in data_subset.dims:
@@ -66,13 +85,43 @@ class TimeSeries:
 
     def _select_process_data(self, variable, latitude=None, longitude=None, level=None, time_range=None, season='annual', year=None):
         """
-        Helper to select, filter, and process data up to the variable level,
-        handling spatial, temporal, and level selections/averaging.
+        Select and process data based on specified parameters.
+    
+        This helper method handles data selection and filtering based on:
+        - Variable selection
+        - Spatial subsetting (latitude/longitude)
+        - Vertical level selection
+        - Temporal filtering (time range, season, year)
+        
+        Parameters
+        ----------
+        variable : str
+            Name of the variable to select from the dataset
+        latitude : float, list, slice, or None
+            Latitude selection criteria
+        longitude : float, list, slice, or None
+            Longitude selection criteria
+        level : float, int, list, slice, or None
+            Vertical level selection criteria. If a slice or list is provided,
+            the levels will be averaged.
+        time_range : slice or None
+            Time range selection criteria
+        season : str, default 'annual'
+            Season to filter by ('annual', 'jjas', 'djf', 'mam', 'son')
+        year : int or None
+            Specific year to filter by
+            
+        Returns
+        -------
+        xarray.DataArray
+            Processed data subset based on the specified selection criteria
+            
+        Raises
+        ------
+        ValueError
+            If the dataset is not loaded or if specified selections are invalid
         """
-        if self.dataset is None:
-            raise ValueError("No dataset available. Load data first.")
-
-        data_filtered = self.dataset
+        data_filtered = self._obj
 
         if 'time' in data_filtered.dims:
             data_filtered = self._filter_by_season(data_filtered, season)
@@ -156,7 +205,38 @@ class TimeSeries:
     def plot_time_series(self, latitude=None, longitude=None, level=None,
                          time_range=None, variable='air', figsize=(16, 10),
                          season='annual', year=None, area_weighted=True):
-        """Plot area-weighted spatial mean time series."""
+        """
+        Plot time series of spatially averaged data.
+    
+        Creates a time series plot of the selected variable, applying optional
+        spatial averaging with area-weighting and seasonal/temporal filtering.
+        
+        Parameters
+        ----------
+        latitude : float, list, slice, or None
+            Latitude selection criteria
+        longitude : float, list, slice, or None
+            Longitude selection criteria
+        level : float, int, list, slice, or None
+            Vertical level selection criteria
+        time_range : slice or None
+            Time range selection criteria
+        variable : str, default 'air'
+            Name of the variable to plot
+        figsize : tuple, default (16, 10)
+            Figure size in inches (width, height)
+        season : str, default 'annual'
+            Season to filter by ('annual', 'jjas', 'djf', 'mam', 'son')
+        year : int or None
+            Specific year to filter by
+        area_weighted : bool, default True
+            Whether to use area-weighting for spatial averaging
+            
+        Returns
+        -------
+        matplotlib.axes.Axes
+            The plot's axes object for further customization
+        """
 
         data_var = self._select_process_data(
             variable, latitude, longitude, level, time_range, season, year
@@ -209,7 +289,38 @@ class TimeSeries:
     def plot_std_space(self, latitude=None, longitude=None, level=None,
                        time_range=None, variable='air', figsize=(16, 10),
                        season='annual', area_weighted=True):
-        """Plot time series of spatial standard deviation (weighted)."""
+        """
+        Plot time series of spatially averaged data.
+    
+        Creates a time series plot of the selected variable, applying optional
+        spatial averaging with area-weighting and seasonal/temporal filtering.
+        
+        Parameters
+        ----------
+        latitude : float, list, slice, or None
+            Latitude selection criteria
+        longitude : float, list, slice, or None
+            Longitude selection criteria
+        level : float, int, list, slice, or None
+            Vertical level selection criteria
+        time_range : slice or None
+            Time range selection criteria
+        variable : str, default 'air'
+            Name of the variable to plot
+        figsize : tuple, default (16, 10)
+            Figure size in inches (width, height)
+        season : str, default 'annual'
+            Season to filter by ('annual', 'jjas', 'djf', 'mam', 'son')
+        year : int or None
+            Specific year to filter by
+        area_weighted : bool, default True
+            Whether to use area-weighting for spatial averaging
+            
+        Returns
+        -------
+        matplotlib.axes.Axes
+            The plot's axes object for further customization
+        """
 
         data_var = self._select_process_data(
              variable, latitude, longitude, level, time_range, season
@@ -271,7 +382,53 @@ class TimeSeries:
         plot_results=True,
         figsize=(16, 10)
     ):
-        """Decompose spatially averaged time series using STL."""
+        """
+        Decompose a time series into trend, seasonal, and residual components.
+        
+        Applies the Seasonal-Trend decomposition using LOESS (STL) to the spatially 
+        averaged time series. The decomposition separates the time series into:
+        - Trend component (long-term change)
+        - Seasonal component (recurring patterns)
+        - Residual component (remaining variation)
+        
+        Parameters
+        ----------
+        variable : str, default 'air'
+            Name of the variable to decompose
+        level : float, int, list, slice, or None
+            Vertical level selection criteria
+        latitude : float, list, slice, or None
+            Latitude selection criteria
+        longitude : float, list, slice, or None
+            Longitude selection criteria
+        time_range : slice or None
+            Time range selection criteria
+        season : str, default 'annual'
+            Season to filter by ('annual', 'jjas', 'djf', 'mam', 'son')
+        stl_seasonal : int, default 13
+            STL decomposition parameter: Length of the seasonal smoother.
+            Must be odd; if even, will be incremented by 1.
+        stl_period : int, default 12
+            STL decomposition parameter: Period of the seasonal component (e.g., 12 for monthly data)
+        area_weighted : bool, default True
+            Whether to use area-weighting for spatial averaging
+        plot_results : bool, default True
+            Whether to create and display decomposition plots
+        figsize : tuple, default (16, 10)
+            Figure size in inches (width, height) when plotting
+            
+        Returns
+        -------
+        dict or (dict, matplotlib.figure.Figure)
+            If plot_results is False, returns a dictionary with the decomposition components
+            (original, trend, seasonal, residual).
+            If plot_results is True, returns both the dictionary and the figure object.
+            
+        Raises
+        ------
+        ValueError
+            If the time series is too short for decomposition or contains invalid values
+    """
 
         data_var = self._select_process_data(
              variable, latitude, longitude, level, time_range, season
@@ -357,3 +514,4 @@ class TimeSeries:
             return results, fig
         else:
             return results
+__all__ = ['TimeSeriesAccessor']

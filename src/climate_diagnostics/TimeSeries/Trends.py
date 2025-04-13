@@ -13,8 +13,8 @@ import cartopy.feature as cfeature
 from dask.distributed import Client, LocalCluster 
 import os
 
-
-class Trends:
+@xr.register_dataset_accessor("climate_trends")
+class TrendsAccessor:
     """
     A class for analyzing and visualizing trend patterns in climate datasets.
     
@@ -41,18 +41,17 @@ class Trends:
         
     Examples
     --------
-    >>> from climate_diagnostics import Trends
-    >>> trends = Trends("/path/to/climate_data.nc")
+    >>> import xarray as xr
+    >>> from climate_diagnostics import register_accessors
+    >>> ds = xr.open_dataset("climate_data.nc")
     >>> # Calculate global temperature trend
-    >>> results = trends.calculate_trend(
+    >>> results = ds.climate_trends.calculate_trend(
     ...     variable="air",
     ...     level=850,  # 850 hPa level
     ...     season="annual",
     ...     area_weighted=True,
     ...     return_results=True
     ... )
-    >>> # Access trend statistics
-    >>> print(results['trend_statistics'])
     
     Notes
     -----
@@ -61,53 +60,18 @@ class Trends:
     cell area toward the poles.
     """
     
-    def __init__(self, filepath=None):
+    def __init__(self, xarray_obj):
         """
-        Initialize the Trends class for analyzing climate data trends.
+        Initialize the accessor with the provided xarray Dataset.
         
         Parameters
         ----------
-        filepath : str, optional
-            Path to the NetCDF or other compatible climate data file.
-            If None, the dataset must be loaded manually later.
-            
-        Notes
-        -----
-        Upon initialization, the class attempts to load the dataset from the
-        provided filepath with automatic chunking for efficient memory usage.
+        xarray_obj : xarray.Dataset
+            The Dataset object this accessor is attached to
         """
-        self.filepath = filepath
-        self.dataset = None
-        
-        self._load_data()
+        self._obj = xarray_obj
 
-    def _load_data(self):
-        """
-        Load dataset with automatic chunking for efficient memory usage.
-        
-        Uses dask to lazily load data with automatic chunking along the time
-        dimension to optimize memory usage for large climate datasets. This 
-        method is called automatically during initialization if a filepath
-        is provided.
-        
-        Raises
-        ------
-        Exception
-            If the file cannot be loaded or is in an incompatible format.
-            
-        Notes
-        -----
-        The auto-chunking strategy uses the 'time' dimension by default,
-        which is optimal for most time series analysis operations.
-        """
-        try:
-            if self.filepath:
-                self.dataset = xr.open_dataset(self.filepath, chunks={'time': 'auto'})
-                print(f"Dataset loaded from {self.filepath} with auto-chunking")
-            else:
-                print("No filepath provided. Initialize dataset manually or provide filepath.")
-        except Exception as e:
-            print(f"Error loading data: {e}")
+    
 
     def _get_coord_name(self, possible_names):
         """
@@ -134,9 +98,9 @@ class Trends:
         >>> print(lat_name)
         'lat'
         """
-        if self.dataset is None: return None
+        if self._obj is None: return None
         for name in possible_names:
-            if name in self.dataset.coords:
+            if name in self._obj.coords:
                 return name
         return None
 
@@ -319,8 +283,7 @@ class Trends:
         ...     return_results=True
         ... )
         """
-        if self.dataset is None: raise ValueError("Dataset not loaded.")
-        if variable not in self.dataset.variables: raise ValueError(f"Variable '{variable}' not found.")
+        if variable not in self._obj.variables: raise ValueError(f"Variable '{variable}' not found.")
 
         # Get coordinate names
         lat_coord = self._get_coord_name(['lat', 'latitude'])
@@ -332,7 +295,7 @@ class Trends:
             raise ValueError("Dataset must contain recognizable time, latitude, and longitude coordinates.")
 
         # Initial data selection
-        data_var = self.dataset[variable]
+        data_var = self._obj[variable]
         if time_coord not in data_var.dims:
             raise ValueError(f"Variable '{variable}' has no '{time_coord}' dimension.")
 
@@ -693,9 +656,9 @@ class Trends:
             Returns None if an error occurs during processing
         """
         
-        if self.dataset is None:
+        if self._obj is None:
             raise ValueError("Dataset not loaded.")
-        if variable not in self.dataset.variables:
+        if variable not in self._obj.variables:
             raise ValueError(f"Variable '{variable}' not found.")
 
         # Format the time period string for labels
@@ -722,7 +685,7 @@ class Trends:
             print(f"Dask client started: {client.dashboard_link}")
             
             # --- Data Selection and Seasonal Filtering ---
-            data_var = self.dataset[variable]
+            data_var = self._obj[variable]
             
             # Apply time range selection if provided
             if time_range is not None:
@@ -906,3 +869,4 @@ class Trends:
                 if 'cluster' in locals() and cluster is not None:
                     cluster.close()
                 print("Dask client closed.")
+__all__ = ['TrendsAccessor']

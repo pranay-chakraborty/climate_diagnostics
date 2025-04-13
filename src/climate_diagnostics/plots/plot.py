@@ -6,41 +6,17 @@ import numpy as np
 from dask.diagnostics import ProgressBar
 import scipy.ndimage as ndimage  # For gaussian filter
 
-class Plots:
+@xr.register_dataset_accessor("climate_plots")
+class PlotsAccessor:
     """
     Geographical visualizations of climate data using contour plots.
     Supports seasonal filtering, mean/std dev calculation, and Gaussian smoothing.
     """
 
-    def __init__(self, filepath=None):
-        """Initialize and load data."""
-        self.filepath = filepath
-        self.dataset = None
-        self._load_data()
+    def __init__(self, xarray_obj):
+        """Initialize the accessor with the provided xarray Dataset."""
+        self._obj = xarray_obj
 
-    def _load_data(self):
-        """Load dataset using xarray with dask chunks."""
-        try:
-            if self.filepath:
-                # Attempt to load suppressing some warnings, use netcdf4 engine
-                with xr.set_options(keep_attrs=True):
-                     self.dataset = xr.open_dataset(self.filepath, chunks='auto', engine='netcdf4')
-                print(f"Dataset loaded from {self.filepath}")
-                # Attempt common renames
-                try:
-                    self.dataset = self.dataset.rename({'latitude': 'lat', 'longitude': 'lon'})
-                except ValueError:
-                    pass 
-                if 'lat' not in self.dataset.coords or 'lon' not in self.dataset.coords:
-                    print("Warning: Standard 'lat'/'lon' coordinates not found.")
-            else:
-                print("No filepath provided during initialization.")
-        except FileNotFoundError:
-             print(f"Error: File not found at {self.filepath}")
-             self.dataset = None
-        except Exception as e:
-            print(f"Error loading data from {self.filepath}: {e}")
-            self.dataset = None
 
     def _filter_by_season(self, data_subset, season='annual'):
         """Filter data by meteorological season."""
@@ -97,12 +73,13 @@ class Plots:
 
     def _select_data(self, variable, latitude=None, longitude=None, level=None, time_range=None):
         """Selects data based on provided dimensions."""
-        if self.dataset is None:
+        
+        if self._obj is None:
             raise ValueError("No dataset available. Load data first.")
-        if variable not in self.dataset.data_vars:
+        if variable not in self._obj.data_vars:
             raise ValueError(f"Variable '{variable}' not found.")
 
-        data_var = self.dataset[variable]
+        data_var = self._obj[variable]
         selection_dict = {}
         method_dict = {} # For 'nearest'
 
@@ -348,3 +325,5 @@ class Plots:
              print(f"Warning: Could not automatically set extent: {e}")
 
         return ax
+    
+__all__ = ['PlotsAccessor']
