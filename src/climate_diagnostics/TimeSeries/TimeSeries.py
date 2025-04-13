@@ -9,15 +9,23 @@ class TimeSeriesAccessor:
     """
     Accessor for analyzing and visualizing climate time series from xarray datasets.
     
-    Provides methods for weighted spatial averaging, STL decomposition, and time series visualization.
+    This accessor provides methods for extracting, processing, and visualizing time series
+    from climate datasets with support for:
+    - Weighted spatial averaging across regions
+    - Seasonal filtering and temporal subsetting
+    - Vertical level selection
+    - Time series decomposition using STL
+    - Spatial variability analysis
     
     Examples
     --------
     >>> import xarray as xr
     >>> from climate_diagnostics import register_accessors
     >>> ds = xr.open_dataset("climate_data.nc")
-    >>> ds.climate.plot_time_series(variable="air", latitude=slice(30, 60))
-    >>> decomp = ds.climate.decompose_time_series(variable="air", level=850)
+    >>> # Plot time series of temperature averaged over Northern Hemisphere midlatitudes
+    >>> ds.climate_timeseries.plot_time_series(variable="air", latitude=slice(60, 30))
+    >>> # Decompose precipitation time series into trend and seasonal components
+    >>> decomp = ds.climate_timeseries.decompose_time_series(variable="pr", level=850)
     """
 
     def __init__(self, xarray_obj):
@@ -35,7 +43,7 @@ class TimeSeriesAccessor:
 
     def _filter_by_season(self, data_subset, season='annual'):
         """
-         Filter data subset by meteorological season.
+        Filter data subset by meteorological season.
     
         Parameters
         ----------
@@ -57,7 +65,7 @@ class TimeSeriesAccessor:
         Raises
         ------
         ValueError
-            If time dimension is missing or months cannot be determined
+            If time dimension is missing or month information cannot be determined
         """
         if season.lower() == 'annual':
             return data_subset
@@ -119,7 +127,14 @@ class TimeSeriesAccessor:
         Raises
         ------
         ValueError
-            If the dataset is not loaded or if specified selections are invalid
+            If the dataset is not loaded, variable doesn't exist, or if specified selections 
+            result in empty data
+            
+        Notes
+        -----
+        This method handles both exact coordinate matching and nearest-neighbor selection
+        when appropriate. For level selection, it will automatically average multiple levels
+        if a slice or list is provided.
         """
         data_filtered = self._obj
 
@@ -206,36 +221,40 @@ class TimeSeriesAccessor:
                          time_range=None, variable='air', figsize=(16, 10),
                          season='annual', year=None, area_weighted=True):
         """
-        Plot time series of spatially averaged data.
+        Plot time series of spatial standard deviation.
     
-        Creates a time series plot of the selected variable, applying optional
-        spatial averaging with area-weighting and seasonal/temporal filtering.
+        Creates a time series plot showing how the spatial variability (standard deviation)
+        of the selected variable evolves over time, with optional area-weighting
+        and seasonal/temporal filtering.
         
         Parameters
         ----------
         latitude : float, list, slice, or None
-            Latitude selection criteria
+            Latitude selection criteria for spatial subsetting
         longitude : float, list, slice, or None
-            Longitude selection criteria
+            Longitude selection criteria for spatial subsetting
         level : float, int, list, slice, or None
-            Vertical level selection criteria
+            Vertical level selection criteria. Multiple levels will be averaged.
         time_range : slice or None
-            Time range selection criteria
+            Time range to include in the plot
         variable : str, default 'air'
-            Name of the variable to plot
+            Name of the variable to analyze
         figsize : tuple, default (16, 10)
             Figure size in inches (width, height)
         season : str, default 'annual'
             Season to filter by ('annual', 'jjas', 'djf', 'mam', 'son')
-        year : int or None
-            Specific year to filter by
         area_weighted : bool, default True
-            Whether to use area-weighting for spatial averaging
+            Whether to use cosine(latitude) weighting for spatial standard deviation
             
         Returns
         -------
         matplotlib.axes.Axes
             The plot's axes object for further customization
+            
+        Raises
+        ------
+        ValueError
+            If time dimension is not found or if no spatial dimensions exist
         """
 
         data_var = self._select_process_data(
@@ -290,36 +309,40 @@ class TimeSeriesAccessor:
                        time_range=None, variable='air', figsize=(16, 10),
                        season='annual', area_weighted=True):
         """
-        Plot time series of spatially averaged data.
+        Plot time series of spatial standard deviation.
     
-        Creates a time series plot of the selected variable, applying optional
-        spatial averaging with area-weighting and seasonal/temporal filtering.
+        Creates a time series plot showing how the spatial variability (standard deviation)
+        of the selected variable evolves over time, with optional area-weighting
+        and seasonal/temporal filtering.
         
         Parameters
         ----------
         latitude : float, list, slice, or None
-            Latitude selection criteria
+            Latitude selection criteria for spatial subsetting
         longitude : float, list, slice, or None
-            Longitude selection criteria
+            Longitude selection criteria for spatial subsetting
         level : float, int, list, slice, or None
-            Vertical level selection criteria
+            Vertical level selection criteria. Multiple levels will be averaged.
         time_range : slice or None
-            Time range selection criteria
+            Time range to include in the plot
         variable : str, default 'air'
-            Name of the variable to plot
+            Name of the variable to analyze
         figsize : tuple, default (16, 10)
             Figure size in inches (width, height)
         season : str, default 'annual'
             Season to filter by ('annual', 'jjas', 'djf', 'mam', 'son')
-        year : int or None
-            Specific year to filter by
         area_weighted : bool, default True
-            Whether to use area-weighting for spatial averaging
+            Whether to use cosine(latitude) weighting for spatial standard deviation
             
         Returns
         -------
         matplotlib.axes.Axes
             The plot's axes object for further customization
+            
+        Raises
+        ------
+        ValueError
+            If time dimension is not found or if no spatial dimensions exist
         """
 
         data_var = self._select_process_data(
@@ -396,22 +419,23 @@ class TimeSeriesAccessor:
         variable : str, default 'air'
             Name of the variable to decompose
         level : float, int, list, slice, or None
-            Vertical level selection criteria
+            Vertical level selection criteria. Multiple levels will be averaged.
         latitude : float, list, slice, or None
-            Latitude selection criteria
+            Latitude selection criteria for spatial subsetting
         longitude : float, list, slice, or None
-            Longitude selection criteria
+            Longitude selection criteria for spatial subsetting
         time_range : slice or None
-            Time range selection criteria
+            Time range to include in the decomposition
         season : str, default 'annual'
             Season to filter by ('annual', 'jjas', 'djf', 'mam', 'son')
         stl_seasonal : int, default 13
             STL decomposition parameter: Length of the seasonal smoother.
             Must be odd; if even, will be incremented by 1.
         stl_period : int, default 12
-            STL decomposition parameter: Period of the seasonal component (e.g., 12 for monthly data)
+            STL decomposition parameter: Period of the seasonal component 
+            (e.g., 12 for monthly data, 4 for quarterly data)
         area_weighted : bool, default True
-            Whether to use area-weighting for spatial averaging
+            Whether to use cosine(latitude) weighting for spatial averaging
         plot_results : bool, default True
             Whether to create and display decomposition plots
         figsize : tuple, default (16, 10)
@@ -419,10 +443,11 @@ class TimeSeriesAccessor:
             
         Returns
         -------
-        dict or (dict, matplotlib.figure.Figure)
+        dict or tuple
             If plot_results is False, returns a dictionary with the decomposition components
             (original, trend, seasonal, residual).
-            If plot_results is True, returns both the dictionary and the figure object.
+            If plot_results is True, returns a tuple (dictionary, figure) with both the
+            decomposition components and the matplotlib figure object.
             
         Raises
         ------

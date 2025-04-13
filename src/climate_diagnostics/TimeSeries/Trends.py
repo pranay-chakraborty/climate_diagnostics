@@ -16,28 +16,26 @@ import os
 @xr.register_dataset_accessor("climate_trends")
 class TrendsAccessor:
     """
-    A class for analyzing and visualizing trend patterns in climate datasets.
+    Accessor for analyzing and visualizing trend patterns in climate datasets.
     
-    This class provides methods to load, filter, and analyze climate data trends
-    from NetCDF files. It supports statistical trend analysis using STL decomposition
-    and linear regression techniques, with proper spatial (area-weighted) averaging,
+    This accessor provides methods to analyze climate data trends from xarray Datasets
+    using statistical decomposition techniques. It supports trend analysis using STL 
+    decomposition and linear regression, with proper spatial (area-weighted) averaging,
     seasonal filtering, and robust visualization options.
     
-    The Trends class is designed to handle common climate data formats with automatic
-    detection of coordinate names (lat, lon, time, level) for maximum compatibility
-    across different datasets and conventions.
+    The accessor handles common climate data formats with automatic detection of 
+    coordinate names (lat, lon, time, level) for maximum compatibility across 
+    different datasets and model output conventions.
     
     Parameters
     ----------
-    filepath : str, optional
-        Path to the NetCDF or other compatible climate data file.
+    xarray_obj : xarray.Dataset
+        The xarray Dataset this accessor is attached to.
         
     Attributes
     ----------
-    filepath : str
-        Path to the input data file.
-    dataset : xarray.Dataset
-        Loaded dataset with climate variables.
+    _obj : xarray.Dataset
+        Reference to the attached dataset with climate variables.
         
     Examples
     --------
@@ -52,6 +50,12 @@ class TrendsAccessor:
     ...     area_weighted=True,
     ...     return_results=True
     ... )
+    >>> # Calculate spatial trends for precipitation
+    >>> trend_map = ds.climate_trends.calculate_spatial_trends(
+    ...     variable="precip",
+    ...     season="jjas",
+    ...     num_years=10  # Trends per decade
+    ... )
     
     Notes
     -----
@@ -62,12 +66,19 @@ class TrendsAccessor:
     
     def __init__(self, xarray_obj):
         """
-        Initialize the accessor with the provided xarray Dataset.
+        Initialize the climate trends accessor with the provided xarray Dataset.
         
         Parameters
         ----------
         xarray_obj : xarray.Dataset
-            The Dataset object this accessor is attached to
+            The Dataset object this accessor is attached to. Should contain climate
+            data with time, latitude, and longitude dimensions.
+            
+        Notes
+        -----
+        The accessor automatically detects common coordinate naming conventions
+        (e.g., 'lat'/'latitude', 'lon'/'longitude', etc.) to ensure compatibility 
+        with datasets from different sources.
         """
         self._obj = xarray_obj
 
@@ -83,20 +94,13 @@ class TrendsAccessor:
         
         Parameters
         ----------
-        possible_names : list
+        possible_names : list of str
             List of possible coordinate names to search for (e.g., ['lat', 'latitude'])
             
         Returns
         -------
         str or None
             The first matching coordinate name found in the dataset, or None if no match
-            
-        Examples
-        --------
-        >>> trends = Trends("climate_data.nc")
-        >>> lat_name = trends._get_coord_name(['lat', 'latitude'])
-        >>> print(lat_name)
-        'lat'
         """
         if self._obj is None: return None
         for name in possible_names:
@@ -116,8 +120,13 @@ class TrendsAccessor:
         data_array : xarray.DataArray
             Input data to be filtered
         season : str, default='annual'
-            Season selection: 'annual' (no filtering), 'djf' (Dec-Feb), 
-            'mam' (Mar-May), or 'jjas' (Jun-Sep)
+            Season selection: 
+            - 'annual': No filtering, returns all data
+            - 'djf': December, January, February (Northern Hemisphere winter)
+            - 'mam': March, April, May (Northern Hemisphere spring)
+            - 'jja': June, July, August (Northern Hemisphere summer)
+            - 'jjas': June, July, August, September (Northern Hemisphere extended summer)
+            - 'son': September, October, November (Northern Hemisphere fall/autumn)
         time_coord_name : str, default='time'
             Name of the time coordinate in the data array
             
@@ -130,17 +139,6 @@ class TrendsAccessor:
         ------
         UserWarning
             If filtering by the specified season results in no data points
-            
-        Notes
-        -----
-        - The method automatically creates a 'month' coordinate if not present.
-        - Season abbreviations follow standard meteorological conventions:
-          - 'djf': December, January, February (Northern Hemisphere winter)
-          - 'mam': March, April, May (Northern Hemisphere spring)
-          - 'jja': June, July, August (Northern Hemisphere summer)
-          - 'jjas': June, July, August, September (Northern Hemisphere extended summer)
-          - 'son': September, October, November (Northern Hemisphere fall/autumn)
-          - 'annual': All months (no filtering)
         """
         if season.lower() == 'annual':
             return data_array
@@ -256,32 +254,6 @@ class TrendsAccessor:
           towards the poles.
         - Trend significance is assessed through the p_value in the trend_statistics.
         - The plot includes the extracted trend component and the linear fit.
-        
-        Examples
-        --------
-        >>> trends = Trends("climate_data.nc")
-        >>> # Calculate global mean temperature trend
-        >>> results = trends.calculate_trend(
-        ...     variable="air", 
-        ...     level=850,
-        ...     frequency="M",
-        ...     return_results=True
-        ... )
-        >>> 
-        >>> # Check if trend is statistically significant (p < 0.05)
-        >>> p_value = results['trend_statistics'].loc[
-        ...     results['trend_statistics']['statistic'] == 'p_value', 'value'
-        ... ].values[0]
-        >>> print(f"Trend is {'significant' if p_value < 0.05 else 'not significant'}")
-        >>> 
-        >>> # Calculate regional trend for a specific season
-        >>> regional_results = trends.calculate_trend(
-        ...     variable="precip",
-        ...     latitude=slice(-15, 15),   # Tropical band
-        ...     longitude=slice(60, 180),  # Maritime continent to Pacific
-        ...     season="djf",              # Northern winter/Southern summer
-        ...     return_results=True
-        ... )
         """
         if variable not in self._obj.variables: raise ValueError(f"Variable '{variable}' not found.")
 
@@ -613,7 +585,7 @@ class TrendsAccessor:
                            land_only = False,
                            save_plot_path=None):
         """
-        Calculates and plots spatial trends using STL decomposition for each grid point.
+        Calculate and visualize spatial trends using STL decomposition for each grid point.
 
         This method computes trends at each grid point within the specified region using 
         Seasonal-Trend decomposition by LOESS (STL) and parallelizes the computation with Dask.
@@ -646,14 +618,32 @@ class TrendsAccessor:
             Period for STL decomposition (12 for monthly data, 365 for daily data)
         plot_map : bool, default=True
             Whether to generate and show the trend map plot
+        land_only : bool, default=False
+            If True, mask out ocean areas to show land-only data
         save_plot_path : str, optional
             Path to save the plot image. If None, plot is shown but not saved.
 
         Returns
         -------
         xarray.DataArray
-            Computed trends (in units per specified time period)
-            Returns None if an error occurs during processing
+            DataArray of computed trends (in units per specified time period).
+            Return value includes lat/lon coordinates and appropriate metadata.
+
+        Raises
+        ------
+        ValueError
+            If dataset is not loaded, variable not found, insufficient data points, 
+            or other validation errors.
+            
+        Notes
+        -----
+        - This method is computationally intensive but efficiently parallelized using Dask.
+        - For each grid point, STL decomposition extracts the trend component before 
+          computing the linear trend slope.
+        - Trends are automatically scaled according to the frequency parameter and num_years
+          value for consistency (e.g., calculating decadal trends from monthly data).
+        - The resulting visualization includes statistical significance masking, appropriate
+          map projections, and comprehensive metadata.
         """
         
         if self._obj is None:

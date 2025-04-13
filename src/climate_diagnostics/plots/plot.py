@@ -10,16 +10,58 @@ import scipy.ndimage as ndimage  # For gaussian filter
 class PlotsAccessor:
     """
     Geographical visualizations of climate data using contour plots.
-    Supports seasonal filtering, mean/std dev calculation, and Gaussian smoothing.
+    
+    This accessor provides methods for visualizing climate data with support for:
+    - Seasonal filtering (annual, DJF, MAM, JJA, JJAS, SON)
+    - Spatial mean calculations
+    - Temporal standard deviation calculations
+    - Gaussian smoothing for cleaner visualizations
+    - Level selection and averaging
+    - Land-only visualization options
+    
+    Access via the .climate_plots attribute on xarray Datasets.
     """
 
     def __init__(self, xarray_obj):
-        """Initialize the accessor with the provided xarray Dataset."""
+        """
+        Initialize the climate plots accessor.
+        
+        Parameters
+        ----------
+        xarray_obj : xarray.Dataset
+            The xarray Dataset containing climate data variables with spatial
+            coordinates (latitude/longitude) and optionally time and level dimensions.
+        """
         self._obj = xarray_obj
 
 
     def _filter_by_season(self, data_subset, season='annual'):
-        """Filter data by meteorological season."""
+        """
+         Filter data by meteorological season.
+        
+        Parameters
+        ----------
+        data_subset : xarray.Dataset or xarray.DataArray
+            Input data containing a time dimension to filter by season.
+        season : str, default 'annual'
+            Meteorological season to filter by. Options:
+            - 'annual': No filtering, returns all data
+            - 'djf': December, January, February (Winter)
+            - 'mam': March, April, May (Spring)
+            - 'jjas': June, July, August, September (Summer Monsoon)
+            - 'son': September, October, November (Autumn)
+            
+        Returns
+        -------
+        xarray.Dataset or xarray.DataArray
+            Data filtered to include only the specified season.
+            
+        Raises
+        ------
+        ValueError
+            If time dimension is not found or month information cannot be determined.
+        
+        """
         if season.lower() == 'annual':
             return data_subset
         if 'time' not in data_subset.dims:
@@ -45,7 +87,32 @@ class PlotsAccessor:
             return data_subset
 
     def _apply_gaussian_filter(self, data_array, gaussian_sigma):
-        """Apply Gaussian filter to spatial dimensions."""
+        """
+        Apply Gaussian smoothing filter to spatial dimensions of data.
+        
+        Parameters
+        ----------
+        data_array : xarray.DataArray
+            Input data array to smooth. Should have at least 2 spatial dimensions,
+            typically latitude and longitude as the last two dimensions.
+        gaussian_sigma : float or None
+            Standard deviation for Gaussian kernel. If None or <= 0,
+            no smoothing is applied.
+            
+        Returns
+        -------
+        xarray.DataArray
+            Smoothed data array with the same dimensions and coordinates.
+        bool
+            Flag indicating whether smoothing was successfully applied.
+            
+        Notes
+        -----
+        Gaussian filter is applied only to the last two dimensions (assumed to be 
+        spatial). All other dimensions are preserved as-is. The function handles
+        Dask arrays by computing them before filtering. Mode 'nearest' is used
+        for boundary handling to minimize edge artifacts.
+        """
         if gaussian_sigma is None or gaussian_sigma <= 0:
             return data_array, False # No filtering
 
@@ -72,7 +139,46 @@ class PlotsAccessor:
             return data_array, False
 
     def _select_data(self, variable, latitude=None, longitude=None, level=None, time_range=None):
-        """Selects data based on provided dimensions."""
+        """
+        Select data subset based on variable name and dimension constraints.
+        
+        Parameters
+        ----------
+        variable : str
+            Name of the variable to select from the dataset.
+        latitude : slice, array-like, or scalar, optional
+            Latitude range or points to select.
+        longitude : slice, array-like, or scalar, optional
+            Longitude range or points to select.
+        level : int, float, slice, list, or array-like, optional
+            Vertical level(s) to select. If a single value, the nearest level is used.
+            If multiple values, they're selected for potential averaging.
+        time_range : slice or array-like, optional
+            Time range to select.
+            
+        Returns
+        -------
+        xarray.DataArray
+            Selected data subset.
+        str or None
+            Name of the level dimension if found, otherwise None.
+        str or None
+            Level operation type performed:
+            - 'range_selected': Multiple levels selected
+            - 'single_selected': Single level selected
+            - None: No level dimension or selection
+            
+        Raises
+        ------
+        ValueError
+            If the dataset is None or the variable is not found.
+            
+        Notes
+        -----
+        For level selection, this method will try to identify the level dimension as
+        either 'level' or 'lev'. Nearest neighbor interpolation is used when selecting 
+        a single level value that doesn't exactly match coordinates.
+        """
         
         if self._obj is None:
             raise ValueError("No dataset available. Load data first.")
@@ -139,7 +245,53 @@ class PlotsAccessor:
                   cmap='coolwarm',
                   land_only = False,
                   levels=30): 
-        """Plot spatial mean using contourf, optionally smoothed."""
+        """
+        Plot spatial mean of a climate variable with optional filtering and smoothing.
+        
+        Creates a filled contour plot showing the temporal mean of the selected variable,
+        with support for seasonal filtering, level selection, and spatial smoothing.
+        
+        Parameters
+        ----------
+        variable : str, default 'air'
+            Name of the climate variable to plot from the dataset.
+        latitude : slice, array-like, or scalar, optional
+            Latitude range or points to select.
+        longitude : slice, array-like, or scalar, optional
+            Longitude range or points to select.
+        level : int, float, slice, list, or array-like, optional
+            Vertical level(s) to select. If a single value, the nearest level is used.
+            If multiple values, they're averaged.
+        time_range : slice or array-like, optional
+            Time range to select for temporal averaging.
+        season : str, default 'annual'
+            Season to filter by: 'annual', 'djf', 'mam', 'jja', 'jjas', or 'son'.
+        gaussian_sigma : float or None, default None
+            Standard deviation for Gaussian smoothing. If None or <= 0, no smoothing.
+        figsize : tuple, default (16, 10)
+            Figure size (width, height) in inches.
+        cmap : str or matplotlib colormap, default 'coolwarm'
+            Colormap for the contour plot.
+        land_only : bool, default False
+            If True, mask out ocean areas to show land-only data.
+        levels : int or array-like, default 30
+            Number of contour levels or explicit level boundaries for contourf.
+            
+        Returns
+        -------
+        matplotlib.axes.Axes
+            The plot axes object for further customization.
+            
+        Raises
+        ------
+        ValueError
+            If no data remains after selections and filtering, or if the dataset is None.
+            
+        Notes
+        -----
+        This method supports Dask arrays through progress bar integration. The plot
+        includes automatic title generation with time period, level, and smoothing details.
+        """
         selected_data, level_dim_name, level_op = self._select_data(
             variable, latitude, longitude, level, time_range
         )
@@ -280,7 +432,56 @@ class PlotsAccessor:
                       cmap='viridis', 
                       land_only = False,
                       levels=30): # Added levels arg
-        """Plot temporal standard deviation using contourf, optionally smoothed."""
+        """
+        Plot temporal standard deviation of a climate variable.
+        
+        Creates a filled contour plot showing the standard deviation over time for the
+        selected variable, with support for seasonal filtering, level selection, and
+        spatial smoothing.
+        
+        Parameters
+        ----------
+        variable : str, default 'air'
+            Name of the climate variable to plot from the dataset.
+        latitude : slice, array-like, or scalar, optional
+            Latitude range or points to select.
+        longitude : slice, array-like, or scalar, optional
+            Longitude range or points to select.
+        level : int, float, slice, list, or array-like, optional
+            Vertical level(s) to select. If a single value, the nearest level is used.
+            If multiple values, standard deviations are averaged across levels.
+        time_range : slice or array-like, optional
+            Time range to select for calculating temporal standard deviation.
+        season : str, default 'annual'
+            Season to filter by: 'annual', 'djf', 'mam', 'jja', 'jjas', or 'son'.
+        gaussian_sigma : float or None, default None
+            Standard deviation for Gaussian smoothing. If None or <= 0, no smoothing.
+        figsize : tuple, default (16, 10)
+            Figure size (width, height) in inches.
+        cmap : str or matplotlib colormap, default 'viridis'
+            Colormap for the contour plot.
+        land_only : bool, default False
+            If True, mask out ocean areas to show land-only data.
+        levels : int or array-like, default 30
+            Number of contour levels or explicit level boundaries for contourf.
+            
+        Returns
+        -------
+        matplotlib.axes.Axes
+            The plot axes object for further customization.
+            
+        Raises
+        ------
+        ValueError
+            If no data remains after selections and filtering, if the dataset is None,
+            or if fewer than 2 time points are available for standard deviation calculation.
+            
+        Notes
+        -----
+        This method shows the geographic pattern of temporal variability, highlighting
+        regions with high or low variability over the selected time period. The plot
+        includes automatic title generation with time period, level, and smoothing details.
+        """
         selected_data, level_dim_name, level_op = self._select_data(
             variable, latitude, longitude, level, time_range
         )
