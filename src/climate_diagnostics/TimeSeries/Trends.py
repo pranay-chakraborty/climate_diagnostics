@@ -292,8 +292,96 @@ class TrendsAccessor:
 
         # Filter by season
         data_var = self._filter_by_season(data_var, season=season, time_coord_name=time_coord)
+        if variable not in self._obj.variables: 
+            raise ValueError(f"Variable '{variable}' not found.")
+
+        # Get coordinate names
+        lat_coord = self._get_coord_name(['lat', 'latitude'])
+        lon_coord = self._get_coord_name(['lon', 'longitude'])
+        level_coord = self._get_coord_name(['level', 'lev', 'plev', 'zlev'])
+        time_coord = self._get_coord_name(['time'])
+        
+        if not all([lat_coord, lon_coord, time_coord]):
+            raise ValueError("Dataset must contain recognizable time, latitude, and longitude coordinates.")
+
+        # Initial data selection
+        data_var = self._obj[variable]
+        if time_coord not in data_var.dims:
+            raise ValueError(f"Variable '{variable}' has no '{time_coord}' dimension.")
+
+        # Determine calculation type
+        is_global = latitude is None and longitude is None
+        is_point_lat = isinstance(latitude, (int, float))
+        is_point_lon = isinstance(longitude, (int, float))
+        is_point = is_point_lat and is_point_lon
+        
+        calculation_type = 'global' if is_global else ('point' if is_point else 'region')
+
+        # Set default area weighting
+        if area_weighted is None:
+            area_weighted = calculation_type == 'global'
+        if calculation_type == 'point':
+            area_weighted = False
+
+        print(f"Starting trend calculation: type='{calculation_type}', variable='{variable}', season='{season}', area_weighted={area_weighted}")
+
+        # Filter by season
+        data_var = self._filter_by_season(data_var, season=season, time_coord_name=time_coord)
         if len(data_var[time_coord]) == 0:
             raise ValueError(f"No data remains for variable '{variable}' after filtering for season '{season}'.")
+
+        # Validate coordinates before selection
+        # Validate latitude coordinates
+        if latitude is not None and lat_coord in data_var.coords:
+            lat_min, lat_max = data_var[lat_coord].min().item(), data_var[lat_coord].max().item()
+            
+            # Check if latitude selection is completely outside the available range
+            if isinstance(latitude, slice):
+                if latitude.start is not None and latitude.start > lat_max:
+                    raise ValueError(f"Requested latitude minimum {latitude.start} is greater than available maximum {lat_max}")
+                if latitude.stop is not None and latitude.stop < lat_min:
+                    raise ValueError(f"Requested latitude maximum {latitude.stop} is less than available minimum {lat_min}")
+            elif isinstance(latitude, (list, np.ndarray)):
+                if min(latitude) > lat_max or max(latitude) < lat_min:
+                    raise ValueError(f"Requested latitudes [{min(latitude)}, {max(latitude)}] are outside available range [{lat_min}, {lat_max}]")
+            else:  # scalar
+                if latitude < lat_min or latitude > lat_max:
+                    raise ValueError(f"Requested latitude {latitude} is outside available range [{lat_min}, {lat_max}]")
+        
+        # Validate longitude coordinates
+        if longitude is not None and lon_coord in data_var.coords:
+            lon_min, lon_max = data_var[lon_coord].min().item(), data_var[lon_coord].max().item()
+            
+            # Check if longitude selection is completely outside the available range
+            if isinstance(longitude, slice):
+                if longitude.start is not None and longitude.start > lon_max:
+                    raise ValueError(f"Requested longitude minimum {longitude.start} is greater than available maximum {lon_max}")
+                if longitude.stop is not None and longitude.stop < lon_min:
+                    raise ValueError(f"Requested longitude maximum {longitude.stop} is less than available minimum {lon_min}")
+            elif isinstance(longitude, (list, np.ndarray)):
+                if min(longitude) > lon_max or max(longitude) < lon_min:
+                    raise ValueError(f"Requested longitudes [{min(longitude)}, {max(longitude)}] are outside available range [{lon_min}, {lon_max}]")
+            else:  # scalar
+                if longitude < lon_min or longitude > lon_max:
+                    raise ValueError(f"Requested longitude {longitude} is outside available range [{lon_min}, {lon_max}]")
+        
+        # Validate level coordinates
+        level_dim_exists = level_coord and level_coord in data_var.dims
+        if level is not None and level_dim_exists:
+            level_min, level_max = data_var[level_coord].min().item(), data_var[level_coord].max().item()
+            
+            if isinstance(level, (slice, list, np.ndarray)):
+                # Check if completely outside range
+                if isinstance(level, slice):
+                    if level.start is not None and level.start > level_max:
+                        raise ValueError(f"Requested level minimum {level.start} is greater than available maximum {level_max}")
+                    if level.stop is not None and level.stop < level_min:
+                        raise ValueError(f"Requested level maximum {level.stop} is less than available minimum {level_min}")
+                elif min(level) > level_max or max(level) < level_min:
+                    raise ValueError(f"Requested levels [{min(level)}, {max(level)}] are outside available range [{level_min}, {level_max}]")
+            else:  # scalar
+                if level < level_min * 0.5 or level > level_max * 1.5:
+                    print(f"Warning: Requested level {level} is far from available range [{level_min}, {level_max}]")
 
         # Separate slice and point selectors for proper application
         sel_slices = {}
@@ -673,6 +761,75 @@ class TrendsAccessor:
         
         if not all([lat_coord, lon_coord, time_coord]):
             raise ValueError("Dataset must contain recognizable time, latitude, and longitude coordinates.")
+
+        # Validate coordinates before Dask setup
+        data_var = self._obj[variable]
+        
+        # Validate latitude coordinates
+        if lat_coord in data_var.coords and not isinstance(latitude, slice) or (
+                isinstance(latitude, slice) and (latitude.start is not None or latitude.stop is not None)):
+            lat_min, lat_max = data_var[lat_coord].min().item(), data_var[lat_coord].max().item()
+            
+            # Check if latitude selection is completely outside the available range
+            if isinstance(latitude, slice):
+                if latitude.start is not None and latitude.start > lat_max:
+                    raise ValueError(f"Requested latitude minimum {latitude.start} is greater than available maximum {lat_max}")
+                if latitude.stop is not None and latitude.stop < lat_min:
+                    raise ValueError(f"Requested latitude maximum {latitude.stop} is less than available minimum {lat_min}")
+            elif isinstance(latitude, (list, np.ndarray)):
+                if min(latitude) > lat_max or max(latitude) < lat_min:
+                    raise ValueError(f"Requested latitudes [{min(latitude)}, {max(latitude)}] are outside available range [{lat_min}, {lat_max}]")
+            else:  # scalar
+                if latitude < lat_min or latitude > lat_max:
+                    raise ValueError(f"Requested latitude {latitude} is outside available range [{lat_min}, {lat_max}]")
+        
+        # Validate longitude coordinates
+        if lon_coord in data_var.coords and not isinstance(longitude, slice) or (
+                isinstance(longitude, slice) and (longitude.start is not None or longitude.stop is not None)):
+            lon_min, lon_max = data_var[lon_coord].min().item(), data_var[lon_coord].max().item()
+            
+            # Check if longitude selection is completely outside the available range
+            if isinstance(longitude, slice):
+                if longitude.start is not None and longitude.start > lon_max:
+                    raise ValueError(f"Requested longitude minimum {longitude.start} is greater than available maximum {lon_max}")
+                if longitude.stop is not None and longitude.stop < lon_min:
+                    raise ValueError(f"Requested longitude maximum {longitude.stop} is less than available minimum {lon_min}")
+            elif isinstance(longitude, (list, np.ndarray)):
+                if min(longitude) > lon_max or max(longitude) < lon_min:
+                    raise ValueError(f"Requested longitudes [{min(longitude)}, {max(longitude)}] are outside available range [{lon_min}, {lon_max}]")
+            else:  # scalar
+                if longitude < lon_min or longitude > lon_max:
+                    raise ValueError(f"Requested longitude {longitude} is outside available range [{lon_min}, {lon_max}]")
+        
+        # Validate time range
+        if time_range is not None and time_coord in data_var.dims:
+            if time_range != slice(None, None) and not isinstance(time_range, slice):
+                raise TypeError(f"time_range must be a slice, got {type(time_range)}")
+                
+            if isinstance(time_range, slice) and (time_range.start is not None or time_range.stop is not None):
+                try:
+                    time_min, time_max = data_var[time_coord].min().values, data_var[time_coord].max().values
+                    
+                    # Check if time selection is completely outside the available range
+                    if time_range.start is not None:
+                        if np.datetime64(time_range.start) > time_max:
+                            raise ValueError(f"Requested start time {time_range.start} is after available maximum {time_max}")
+                    if time_range.stop is not None:
+                        if np.datetime64(time_range.stop) < time_min:
+                            raise ValueError(f"Requested end time {time_range.stop} is before available minimum {time_min}")
+                except (TypeError, ValueError) as e:
+                    # If we can't compare the times, proceed and let xarray handle it
+                    print(f"Warning: Could not validate time range: {e}")
+        
+        # Validate level if provided
+        if level is not None and level_coord in data_var.dims:
+            level_min, level_max = data_var[level_coord].min().item(), data_var[level_coord].max().item()
+            
+            if isinstance(level, (int, float)):
+                if level < level_min * 0.5 or level > level_max * 1.5:
+                    print(f"Warning: Requested level {level} is far from available range [{level_min}, {level_max}]")
+                elif level < level_min or level > level_max:
+                    raise ValueError(f"Requested level {level} is outside available range [{level_min}, {level_max}]")
 
         # --- Dask Client Setup ---
         try:

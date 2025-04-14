@@ -147,13 +147,13 @@ class TimeSeriesAccessor:
                     year_match = data_filtered.time.dt.year == year
                 except TypeError:
                     year_match = xr.DataArray([t.year == year for t in data_filtered.time.values],
-                                              coords={'time': data_filtered.time}, dims=['time'])
+                                            coords={'time': data_filtered.time}, dims=['time'])
                 data_filtered = data_filtered.sel(time=year_match)
 
                 if data_filtered.time.size == 0:
-                     raise ValueError(f"No data available for year {year} within season '{season}'.")
+                    raise ValueError(f"No data available for year {year} within season '{season}'.")
         elif season.lower() != 'annual' or year is not None:
-             print("Warning: Cannot filter by season or year - 'time' dimension not found.")
+            print("Warning: Cannot filter by season or year - 'time' dimension not found.")
 
         if variable not in data_filtered.data_vars:
             raise ValueError(f"Variable '{variable}' not found. Available: {list(data_filtered.data_vars)}")
@@ -162,46 +162,115 @@ class TimeSeriesAccessor:
         selection_dict = {}
         needs_nearest = False
 
+        # Validate latitude coordinates
         if latitude is not None and 'lat' in data_var.coords:
+            lat_min, lat_max = data_var.lat.min().item(), data_var.lat.max().item()
+            
+            # Check if latitude selection is completely outside the available range
+            if isinstance(latitude, slice):
+                if latitude.start is not None and latitude.start > lat_max:
+                    raise ValueError(f"Requested latitude minimum {latitude.start} is greater than available maximum {lat_max}")
+                if latitude.stop is not None and latitude.stop < lat_min:
+                    raise ValueError(f"Requested latitude maximum {latitude.stop} is less than available minimum {lat_min}")
+            elif isinstance(latitude, (list, np.ndarray)):
+                if min(latitude) > lat_max or max(latitude) < lat_min:
+                    raise ValueError(f"Requested latitudes [{min(latitude)}, {max(latitude)}] are outside available range [{lat_min}, {lat_max}]")
+            else:  # scalar
+                if latitude < lat_min or latitude > lat_max:
+                    raise ValueError(f"Requested latitude {latitude} is outside available range [{lat_min}, {lat_max}]")
+            
             selection_dict['lat'] = latitude
             if isinstance(latitude, (int, float)):
                 needs_nearest = True
 
+        # Validate longitude coordinates
         if longitude is not None and 'lon' in data_var.coords:
+            lon_min, lon_max = data_var.lon.min().item(), data_var.lon.max().item()
+            
+            # Check if longitude selection is completely outside the available range
+            if isinstance(longitude, slice):
+                if longitude.start is not None and longitude.start > lon_max:
+                    raise ValueError(f"Requested longitude minimum {longitude.start} is greater than available maximum {lon_max}")
+                if longitude.stop is not None and longitude.stop < lon_min:
+                    raise ValueError(f"Requested longitude maximum {longitude.stop} is less than available minimum {lon_min}")
+            elif isinstance(longitude, (list, np.ndarray)):
+                if min(longitude) > lon_max or max(longitude) < lon_min:
+                    raise ValueError(f"Requested longitudes [{min(longitude)}, {max(longitude)}] are outside available range [{lon_min}, {lon_max}]")
+            else:  # scalar
+                if longitude < lon_min or longitude > lon_max:
+                    raise ValueError(f"Requested longitude {longitude} is outside available range [{lon_min}, {lon_max}]")
+            
             selection_dict['lon'] = longitude
             if isinstance(longitude, (int, float)):
                 needs_nearest = True
 
+        # Validate time range
+        if time_range is not None and 'time' in data_var.dims:
+            try:
+                time_min, time_max = data_var.time.min().values, data_var.time.max().values
+                
+                # Check if time selection is completely outside the available range
+                if isinstance(time_range, slice):
+                    if time_range.start is not None:
+                        if np.datetime64(time_range.start) > time_max:
+                            raise ValueError(f"Requested start time {time_range.start} is after available maximum {time_max}")
+                    if time_range.stop is not None:
+                        if np.datetime64(time_range.stop) < time_min:
+                            raise ValueError(f"Requested end time {time_range.stop} is before available minimum {time_min}")
+                elif isinstance(time_range, (list, np.ndarray)):
+                    t_min, t_max = np.min(time_range), np.max(time_range)
+                    if np.datetime64(t_min) > time_max or np.datetime64(t_max) < time_min:
+                        raise ValueError(f"Requested time range is outside available range [{time_min}, {time_max}]")
+            except (TypeError, ValueError) as e:
+                # If we can't compare the times, proceed and let xarray handle it
+                print(f"Warning: Could not validate time range: {e}")
+            
+            selection_dict['time'] = time_range
+
         level_dim_name = next((dim for dim in ['level', 'lev'] if dim in data_var.dims), None)
         if level_dim_name:
             if level is not None:
+                # Validate level coordinates
+                level_min, level_max = data_var[level_dim_name].min().item(), data_var[level_dim_name].max().item()
+                
                 if isinstance(level, (slice, list, np.ndarray)):
+                    # Check if completely outside range
+                    if isinstance(level, slice):
+                        if level.start is not None and level.start > level_max:
+                            raise ValueError(f"Requested level minimum {level.start} is greater than available maximum {level_max}")
+                        if level.stop is not None and level.stop < level_min:
+                            raise ValueError(f"Requested level maximum {level.stop} is less than available minimum {level_min}")
+                    elif min(level) > level_max or max(level) < level_min:
+                        raise ValueError(f"Requested levels [{min(level)}, {max(level)}] are outside available range [{level_min}, {level_max}]")
+                    
                     print(f"Averaging over levels: {level}")
                     with xr.set_options(keep_attrs=True):
                         data_var = data_var.sel({level_dim_name: level}).mean(dim=level_dim_name)
                 elif isinstance(level, (int, float)):
+                    # For single values with 'nearest' method, warn if far outside range
+                    if level < level_min * 0.5 or level > level_max * 1.5:
+                        print(f"Warning: Requested level {level} is far from available range [{level_min}, {level_max}]")
+                    
                     selection_dict[level_dim_name] = level
                     needs_nearest = True
                 else:
                     selection_dict[level_dim_name] = level
             elif len(data_var[level_dim_name]) > 1:
-                 level_val = data_var[level_dim_name].values[0]
-                 selection_dict[level_dim_name] = level_val
-                 print(f"Warning: Multiple levels found. Using first level: {level_val}")
+                level_val = data_var[level_dim_name].values[0]
+                selection_dict[level_dim_name] = level_val
+                print(f"Warning: Multiple levels found. Using first level: {level_val}")
         elif level is not None:
-             print(f"Warning: Level dimension '{level_dim_name}' not found. Ignoring 'level' parameter.")
-
-        if time_range is not None and 'time' in data_var.dims:
-            selection_dict['time'] = time_range
-
+            print(f"Warning: Level dimension not found. Ignoring 'level' parameter.")
+        
+        # Continue with existing code for selection
         if selection_dict:
             has_slice = any(isinstance(v, slice) for v in selection_dict.values())
             method_to_use = 'nearest' if needs_nearest and not has_slice else None
 
             if method_to_use is None and needs_nearest and has_slice:
                 print("Warning: Using slice selection for one dimension and nearest neighbor "
-                      "for another in the same .sel() call is not supported by xarray. "
-                      "Nearest neighbor selection will be ignored for non-slice dimensions in this step.")
+                    "for another in the same .sel() call is not supported by xarray. "
+                    "Nearest neighbor selection will be ignored for non-slice dimensions in this step.")
 
             print(f"Applying final selection: {selection_dict} with method='{method_to_use}'")
             try:
@@ -213,7 +282,7 @@ class TimeSeriesAccessor:
                 raise 
 
         if data_var.size == 0:
-             print("Warning: Selection resulted in an empty DataArray.")
+            print("Warning: Selection resulted in an empty DataArray.")
 
         return data_var
 
