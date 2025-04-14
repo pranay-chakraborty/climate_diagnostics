@@ -11,6 +11,11 @@ jobs:
       contents: write  
     steps:
     - uses: actions/checkout@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements*.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
@@ -18,8 +23,11 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
+        # Install all dependencies needed for importing modules
+        pip install statsmodels scikit-learn cartopy matplotlib xarray pandas numpy
+        # Then install the package
         pip install -e .
-        pip install sphinx sphinx_rtd_theme numpydoc matplotlib cartopy xarray pandas numpy
+        pip install sphinx sphinx_rtd_theme numpydoc
     - name: Build docs
       run: |
         cd docs
