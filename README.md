@@ -46,8 +46,8 @@ pip install climate-diagnostics
 
 ### From Source
 ```bash
-git clone https://github.com/pranay-chakraborty/climate_diagnostics.git 
-cd climate_diagnostics
+git clone https://github.com/pranay-chakraborty/climate_diagnostics_toolkit.git 
+cd climate_diagnostics_toolkit
 pip install -e .
 ```
 
@@ -182,7 +182,7 @@ pytest
 If you use Climate Diagnostics Toolkit in your research, please cite:
 
 ```
-Chakraborty, P. (2025) & Muhammed I. K., A. (2025). Climate Diagnostics Toolkit: Tools for analyzing and visualizing climate data using xarray accessors. Version 0.1.0. https://github.com/pranay-chakraborty/climate_diagnostics
+Chakraborty, P. (2025) & Muhammed I. K., A. (2025). Climate Diagnostics Toolkit: Tools for analyzing and visualizing climate data using xarray accessors. Version 0.2.1. https://github.com/pranay-chakraborty/climate_diagnostics
 ```
 
 For LaTeX users:
@@ -192,7 +192,7 @@ For LaTeX users:
   author = {Chakraborty, Pranay and Muhammed I. K., Adil},
   title = {{Climate Diagnostics Toolkit: Tools for analyzing and visualizing climate data using xarray accessors}},
   year = {2025},
-  version = {0.1.0},
+  version = {0.2.1},
   publisher = {GitHub},
   url = {https://github.com/pranay-chakraborty/climate_diagnostics},
   note = {[Computer software]}
