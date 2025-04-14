@@ -19,13 +19,35 @@ class TimeSeriesAccessor:
     
     Examples
     --------
-    >>> import xarray as xr
+   >>> import xarray as xr
     >>> from climate_diagnostics import register_accessors
     >>> ds = xr.open_dataset("climate_data.nc")
-    >>> # Plot time series of temperature averaged over Northern Hemisphere midlatitudes
-    >>> ds.climate_timeseries.plot_time_series(variable="air", latitude=slice(60, 30))
+    >>> 
+    >>> # Plot time series of temperature averaged over a given slice
+    >>> ds.climate_timeseries.plot_time_series(
+    ...     variable="air",
+    ...     latitude=slice(60, 6),
+    ...     longitude=slice(60, 110),
+    ...     season="annual"
+    ... )
+    >>> 
+    >>> # Plot monsoon precipitation time series with area weighting
+    >>> ds.climate_timeseries.plot_time_series(
+    ...     variable="prate", 
+    ...     latitude=slice(60, 4),
+    ...     longitude=slice(60, 100), 
+    ...     season="jjas",
+    ...     time_range=slice("2000-01-01", "2020-12-31"),
+    ...     area_weighted=True
+    ... )
+    >>> 
     >>> # Decompose precipitation time series into trend and seasonal components
-    >>> decomp = ds.climate_timeseries.decompose_time_series(variable="pr", level=850)
+    >>> decomp = ds.climate_timeseries.decompose_time_series(
+    ...     variable="prate", 
+    ...     level=850,
+    ...     stl_period=12,  # Monthly data
+    ...     plot_results=True
+    ... )
     """
 
     def __init__(self, xarray_obj):
@@ -334,6 +356,42 @@ class TimeSeriesAccessor:
         ------
         ValueError
             If time dimension is not found or if no spatial dimensions exist
+            
+        Notes
+        -----
+        - Area weighting is applied using cosine of latitude when enabled
+        - For Dask arrays, computation is performed with a progress bar
+        - The plot displays appropriate units and metadata from the variable attributes
+        - Grid lines are added for better readability
+            
+        Examples
+        --------
+        >>> # Basic time series of temperature over a region
+        >>> ds.climate_timeseries.plot_time_series(
+        ...     variable='air',
+        ...     latitude=slice(40, 6),
+        ...     longitude=slice(60, 100)
+        ... )
+        >>> 
+        >>> # Compare winter temperature from specific pressure level
+        >>> ds.climate_timeseries.plot_time_series(
+        ...     variable='air',
+        ...     level=500,  # 500 hPa
+        ...     season='djf',
+        ...     time_range=slice('2000-01-01', '2020-12-31'),
+        ...     save_plot_path='/home/user/Downloads/winter_temp_500hPa.png'
+        ... )
+        >>> 
+        >>> # Time series of precipitation without area weighting
+        >>> ax = ds.climate_timeseries.plot_time_series(
+        ...     variable='prate',
+        ...     latitude=slice(40, 6),
+        ...     longitude=slice(60,110),
+        ...     area_weighted=False
+        ... )
+        >>> # Customize the plot further
+        >>> ax.set_ylim(0, 10)
+        >>> ax.set_title('Tropical Precipitation')
         """
 
         data_var = self._select_process_data(
@@ -436,6 +494,42 @@ class TimeSeriesAccessor:
         ------
         ValueError
             If time dimension is not found or if no spatial dimensions exist
+        Notes
+        -----
+        - This method is particularly useful for analyzing the variability across regions
+        - Higher standard deviation values indicate greater spatial heterogeneity
+        - Area weighting accounts for the decreasing grid cell size toward the poles
+        - The computation uses Dask's progress bar
+        
+        Examples
+        --------
+        >>> # Basic spatial variability of temperature over time
+        >>> ds.climate_timeseries.plot_std_space(
+        ...     variable='air',
+        ...     longitude = slice(40,6)
+        ...     latitude=slice(60,110), 
+        ...     area_weighted=True
+        ... )
+        >>> 
+        >>> # Regional monsoon precipitation variability
+        >>> ax = ds.climate_timeseries.plot_std_space(
+        ...     variable='prate',
+        ...     latitude=slice(40, 6),
+        ...     longitude=slice(60, 110),
+        ...     season='jjas',  # Summer monsoon
+        ...     time_range=slice('1980-01-01', '2020-12-31')
+        ... )
+        >>> 
+        >>> # spatial variability at different atmospheric levels
+        >>> ds.climate_timeseries.plot_std_space(
+        ...     variable='geopotential_height',
+        ...     level=850,
+        ... )
+        >>> ds.climate_timeseries.plot_std_space(
+        ...     variable='geopotential_height',
+        ...     level=500,
+        ... )
+        
         """
 
         data_var = self._select_process_data(
@@ -554,6 +648,31 @@ class TimeSeriesAccessor:
         ------
         ValueError
             If the time series is too short for decomposition or contains invalid values
+            
+        Notes
+        -----
+        - The STL decomposition requires at least 2*period+1 data points
+        - For monthly data (period=12), this means at least 25 time points
+        - The stl_seasonal parameter controls smoothness of the seasonal component
+        - Higher stl_seasonal values result in smoother seasonal components
+        - Time series is first spatially averaged (area-weighted) before decomposition
+        - The trend component can be used to analyze long-term climate change signals
+        - The seasonal component reveals recurring annual patterns
+        - The residual component can highlight anomalous events
+        
+        Examples
+        ---------
+         
+        >>> # Analyze regional precipitation trends without plotting
+        >>> precip_components = ds.climate_timeseries.decompose_time_series(
+        ...     variable='prate',
+        ...     latitude=slice(40, 6),
+        ...     longitude=slice(60, 100),
+        ...     plot_results=False,
+        ...     stl_seasonal=13,  # Smoother seasonal component
+        ...     stl_period=12
+        ... )
+        
     """
 
         data_var = self._select_process_data(

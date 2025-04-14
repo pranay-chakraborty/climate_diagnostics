@@ -20,6 +20,22 @@ class PlotsAccessor:
     - Land-only visualization options
     
     Access via the .climate_plots attribute on xarray Datasets.
+    Examples
+    --------
+    >>> import xarray as xr
+    >>> # Open a climate dataset with lat, lon, time dimensions
+    >>> ds = xr.open_dataset('climate_data.nc')
+    >>> 
+    >>> # Create a basic plot using the accessor
+    >>> ds.climate_plots.plot_mean(variable='air')
+    >>> 
+    >>> # Filter for winter season and specific region
+    >>> ds.climate_plots.plot_mean(
+    ...     variable='air', 
+    ...     season='djf',
+    ...     latitude=slice(40, 6),
+    ...     longitude=slice(65,110)
+    ... )
     """
 
     def __init__(self, xarray_obj):
@@ -375,6 +391,37 @@ class PlotsAccessor:
         -----
         This method supports Dask arrays through progress bar integration. The plot
         includes automatic title generation with time period, level, and smoothing details.
+        
+        Examples
+        --------
+        >>> # Basic temperature plot
+        >>> ds.climate_plots.plot_mean(variable='temperature')
+        >>> 
+        >>> # Plot with seasonal filtering and region selection
+        >>> ds.climate_plots.plot_mean(
+        ...     variable='air',
+        ...     season='jjas',  # summer monsoon
+        ...     latitude=slice(40, 6),
+        ...     longitude=slice(65, 100),
+        ...     levels=150,
+        ...     cmap='coolwarm'
+        ... )
+        >>> 
+        >>> # Plot at specific pressure level with smoothing and saving
+        >>> ds.climate_plots.plot_mean(
+        ...     variable='air',
+        ...     level=500,  # 500 hPa
+        ...     gaussian_sigma=1,
+        ...     land_only=True,
+        ...     save_plot_path='/home/user/Downloads/gph_500hPa.png'
+        ... )
+        >>> 
+        >>> # Plot with time range selection
+        >>> ds.climate_plots.plot_mean(
+        ...     variable='air',
+        ...     time_range=slice('2000-01-01','2010-12-31')
+        ... )
+        
         """
         selected_data, level_dim_name, level_op = self._select_data(
             variable, latitude, longitude, level, time_range
@@ -571,6 +618,28 @@ class PlotsAccessor:
         This method shows the geographic pattern of temporal variability, highlighting
         regions with high or low variability over the selected time period. The plot
         includes automatic title generation with time period, level, and smoothing details.
+        
+        Examples
+        --------
+        >>> # Basic standard deviation plot
+        >>> ds.climate_plots.plot_std_time(variable='temperature')
+        >>> 
+        >>> # Plot standard deviation of monsoon rainfall
+        >>> ds.climate_plots.plot_std_time(
+        ...     variable='prate',
+        ...     season='jjas',
+        ...     latitude=slice(40, 6),
+        ...     longitude=slice(60, 100),
+        ...     cmap='YlOrRd',
+        ...     levels=150
+        ... )
+        >>> 
+        >>> # Plot interannual variability with smoothing
+        >>> ds.climate_plots.plot_std_time(
+        ...     variable='sea_surface_temperature',
+        ...     gaussian_sigma=1.0,
+        ...     time_range=slice('1950-01-01', '2020-12-28')
+        ... )
         """
         selected_data, level_dim_name, level_op = self._select_data(
             variable, latitude, longitude, level, time_range

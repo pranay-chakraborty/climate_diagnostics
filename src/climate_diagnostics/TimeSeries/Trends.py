@@ -331,6 +331,7 @@ class TrendsAccessor:
             raise ValueError(f"No data remains for variable '{variable}' after filtering for season '{season}'.")
 
         # Validate coordinates before selection
+        
         # Validate latitude coordinates
         if latitude is not None and lat_coord in data_var.coords:
             lat_min, lat_max = data_var[lat_coord].min().item(), data_var[lat_coord].max().item()
