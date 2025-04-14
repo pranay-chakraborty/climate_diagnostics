@@ -37,8 +37,8 @@ From Source
 
 .. code-block:: bash
 
-   git https://github.com/pranay-chakraborty/climate_diagnostics_toolkit.git
-   cd climate_diagnostics_toolkit
+   git https://github.com/pranay-chakraborty/climate_diagnostics.git
+   cd climate_diagnostics
    pip install -e .
 
 Core Components
