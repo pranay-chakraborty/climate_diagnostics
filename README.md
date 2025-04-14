@@ -39,7 +39,7 @@ Climate Diagnostics Toolkit provides powerful tools to process, analyze, and vis
 
 ## Installation
 
-### Via pip
+### Via pip (recommended)
 ```bash
 pip install climate-diagnostics
 ```

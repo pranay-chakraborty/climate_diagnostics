@@ -16,7 +16,7 @@ extensions = [
     'sphinx.ext.intersphinx',
     'sphinx.ext.viewcode',
     'sphinx.ext.githubpages',
-    'nbsphinx',
+    # 'nbsphinx',
     'sphinx_rtd_theme',
 ]
 
