@@ -22,6 +22,25 @@ Key Features
 * **Multi-model Analysis**: Tools for comparing and evaluating climate model outputs
 * **Performance Optimization**: Support for Dask-powered parallel processing of large datasets
 
+Installation
+-------------
+
+Via pip (recommended)
+~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: bash
+
+   pip install climate-diagnostics
+
+From Source
+~~~~~~~~~~~
+
+.. code-block:: bash
+
+   git https://github.com/pranay-chakraborty/climate_diagnostics_toolkit.git
+   cd climate_diagnostics_toolkit
+   pip install -e .
+
 Core Components
 ---------------
 
@@ -39,13 +58,19 @@ Getting Started
    import xarray as xr
    from climate_diagnostics import accessors
    # Open a dataset
-   ds = xr.open_dataset("era5_monthly_temperature.nc")
+   ds = xr.open_dataset("/home/user/Downloads/air.mon.mean.nc")
 
    # Create a visualization
-   ds.climate_plots.plot_mean(variable="t2m", season="djf")
+   ds.climate_plots.plot_mean(variable="air", season="djf")
 
    # Analyze trends
-   ds.climate_trends.calculate_spatial_trends(variable="t2m", num_years=10)
+   ds.climate_trends.calculate_spatial_trends(
+      variable="air", 
+      num_years=10,
+      latitude = slice(40,6),
+      longitude = slice(60,110)
+   
+   )
 
 
 .. toctree::
