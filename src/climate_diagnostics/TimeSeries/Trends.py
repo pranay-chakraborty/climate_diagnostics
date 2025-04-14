@@ -185,7 +185,8 @@ class TrendsAccessor:
                         area_weighted=True,
                         period=12,
                         plot=True,
-                        return_results=False
+                        return_results=False,
+                        save_plot_path = None
                         ):
         """
         Calculate trends from time series using STL decomposition and linear regression.
@@ -223,6 +224,8 @@ class TrendsAccessor:
             Generate visualization of the trend analysis
         return_results : bool, default=False
             Return dictionary with calculation results
+        save_plot_path : str, optional
+            Path where the plot should be saved. If None (default), the plot is not saved.
             
         Returns
         -------
@@ -551,6 +554,9 @@ class TrendsAccessor:
             ax = plt.gca()
             ax.xaxis.set_major_locator(MaxNLocator(10))
             plt.tight_layout()
+            if save_plot_path is not None:
+                plt.savefig(save_plot_path, bbox_inches='tight', dpi=300)
+                print(f"Plot saved to: {save_plot_path}")
             plt.show()
 
         # Return results

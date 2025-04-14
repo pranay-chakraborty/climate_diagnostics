@@ -171,7 +171,8 @@ class PlotsAccessor:
         Raises
         ------
         ValueError
-            If the dataset is None or the variable is not found.
+            If the dataset is None, the variable is not found, or if 
+            requested coordinates are outside available range.
             
         Notes
         -----
@@ -180,8 +181,7 @@ class PlotsAccessor:
         a single level value that doesn't exactly match coordinates.
         """
         
-        if self._obj is None:
-            raise ValueError("No dataset available. Load data first.")
+        
         if variable not in self._obj.data_vars:
             raise ValueError(f"Variable '{variable}' not found.")
 
@@ -189,25 +189,106 @@ class PlotsAccessor:
         selection_dict = {}
         method_dict = {} # For 'nearest'
 
-        if latitude is not None: selection_dict['lat'] = latitude
-        if longitude is not None: selection_dict['lon'] = longitude
-        if time_range is not None and 'time' in data_var.dims: selection_dict['time'] = time_range
+        # Validate latitude coordinates
+        if latitude is not None:
+            if 'lat' not in data_var.coords:
+                raise ValueError("Latitude coordinate 'lat' not found in dataset.")
+            
+            lat_min, lat_max = data_var.lat.min().item(), data_var.lat.max().item()
+            
+            # Check if latitude selection is completely outside the available range
+            if isinstance(latitude, slice):
+                if latitude.start is not None and latitude.start > lat_max:
+                    raise ValueError(f"Requested latitude minimum {latitude.start} is greater than available maximum {lat_max}")
+                if latitude.stop is not None and latitude.stop < lat_min:
+                    raise ValueError(f"Requested latitude maximum {latitude.stop} is less than available minimum {lat_min}")
+            elif isinstance(latitude, (list, np.ndarray)):
+                if min(latitude) > lat_max or max(latitude) < lat_min:
+                    raise ValueError(f"Requested latitudes [{min(latitude)}, {max(latitude)}] are outside available range [{lat_min}, {lat_max}]")
+            else:  # scalar
+                if latitude < lat_min or latitude > lat_max:
+                    raise ValueError(f"Requested latitude {latitude} is outside available range [{lat_min}, {lat_max}]")
+            
+            selection_dict['lat'] = latitude
+
+        # Validate longitude coordinates
+        if longitude is not None:
+            if 'lon' not in data_var.coords:
+                raise ValueError("Longitude coordinate 'lon' not found in dataset.")
+            
+            lon_min, lon_max = data_var.lon.min().item(), data_var.lon.max().item()
+            
+            # Check if longitude selection is completely outside the available range
+            if isinstance(longitude, slice):
+                if longitude.start is not None and longitude.start > lon_max:
+                    raise ValueError(f"Requested longitude minimum {longitude.start} is greater than available maximum {lon_max}")
+                if longitude.stop is not None and longitude.stop < lon_min:
+                    raise ValueError(f"Requested longitude maximum {longitude.stop} is less than available minimum {lon_min}")
+            elif isinstance(longitude, (list, np.ndarray)):
+                if min(longitude) > lon_max or max(longitude) < lon_min:
+                    raise ValueError(f"Requested longitudes [{min(longitude)}, {max(longitude)}] are outside available range [{lon_min}, {lon_max}]")
+            else:  # scalar
+                if longitude < lon_min or longitude > lon_max:
+                    raise ValueError(f"Requested longitude {longitude} is outside available range [{lon_min}, {lon_max}]")
+            
+            selection_dict['lon'] = longitude
+
+        # Validate time range
+        if time_range is not None and 'time' in data_var.dims:
+            if 'time' not in data_var.coords:
+                raise ValueError("Time coordinate 'time' not found in dataset.")
+            
+            # For time, we need to be careful with datetime comparisons
+            try:
+                time_min, time_max = data_var.time.min().values, data_var.time.max().values
+                
+                # Check if time selection is completely outside the available range
+                if isinstance(time_range, slice):
+                    if time_range.start is not None:
+                        if np.datetime64(time_range.start) > time_max:
+                            raise ValueError(f"Requested start time {time_range.start} is after available maximum {time_max}")
+                    if time_range.stop is not None:
+                        if np.datetime64(time_range.stop) < time_min:
+                            raise ValueError(f"Requested end time {time_range.stop} is before available minimum {time_min}")
+                elif isinstance(time_range, (list, np.ndarray)):
+                    t_min, t_max = np.min(time_range), np.max(time_range)
+                    if np.datetime64(t_min) > time_max or np.datetime64(t_max) < time_min:
+                        raise ValueError(f"Requested time range is outside available range [{time_min}, {time_max}]")
+            except (TypeError, ValueError) as e:
+                # If we can't compare the times, proceed and let xarray handle it
+                print(f"Warning: Could not validate time range: {e}")
+            
+            selection_dict['time'] = time_range
 
         level_dim_name = next((dim for dim in ['level', 'lev'] if dim in data_var.dims), None)
         level_op = None # To track if level mean/selection occurred
 
         if level_dim_name:
             if level is not None:
+                # Validate level coordinates
+                level_min, level_max = data_var[level_dim_name].min().item(), data_var[level_dim_name].max().item()
+                
                 if isinstance(level, (slice, list, np.ndarray)):
-                    # Select range/list of levels for potential later averaging
+                    # Check if completely outside range
+                    if isinstance(level, slice):
+                        if level.start is not None and level.start > level_max:
+                            raise ValueError(f"Requested level minimum {level.start} is greater than available maximum {level_max}")
+                        if level.stop is not None and level.stop < level_min:
+                            raise ValueError(f"Requested level maximum {level.stop} is less than available minimum {level_min}")
+                    elif min(level) > level_max or max(level) < level_min:
+                        raise ValueError(f"Requested levels [{min(level)}, {max(level)}] are outside available range [{level_min}, {level_max}]")
+                    
                     selection_dict[level_dim_name] = level
                     level_op = 'range_selected'
                 elif isinstance(level, (int, float)):
-                    # Select single level with nearest neighbor
+                    # For single values with 'nearest' method, warn if far outside range
+                    if level < level_min * 0.5 or level > level_max * 1.5:
+                        print(f"Warning: Requested level {level} is far from available range [{level_min}, {level_max}]")
+                    
                     selection_dict[level_dim_name] = level
                     method_dict[level_dim_name] = 'nearest'
                     level_op = 'single_selected'
-                else: # e.g. single value already in coords
+                else:
                     selection_dict[level_dim_name] = level
                     level_op = 'single_selected'
             elif len(data_var[level_dim_name]) > 1:
@@ -226,7 +307,6 @@ class PlotsAccessor:
                 selected_data = selected_data.sel({dim: selection_dict[dim]}, method=method)
                 del selection_dict[dim]  
         
-        
         if selection_dict:
             selected_data = selected_data.sel(selection_dict)
             
@@ -244,7 +324,9 @@ class PlotsAccessor:
                   figsize=(16, 10), 
                   cmap='coolwarm',
                   land_only = False,
-                  levels=30): 
+                  levels=30,
+                  save_plot_path = None
+                  ): 
         """
         Plot spatial mean of a climate variable with optional filtering and smoothing.
         
@@ -276,6 +358,8 @@ class PlotsAccessor:
             If True, mask out ocean areas to show land-only data.
         levels : int or array-like, default 30
             Number of contour levels or explicit level boundaries for contourf.
+        save_plot_path : str, optional
+             Path where the plot should be saved. If None (default), the plot is not saved.
             
         Returns
         -------
@@ -417,6 +501,9 @@ class PlotsAccessor:
         except ValueError as e:
              print(f"Warning: Could not automatically set extent: {e}") # e.g., if coords are non-monotonic after sel
 
+        if save_plot_path is not None:
+            plt.savefig(save_plot_path, bbox_inches='tight', dpi=300)
+            print(f"Plot saved to: {save_plot_path}")
         return ax
 
 
@@ -431,7 +518,8 @@ class PlotsAccessor:
                       figsize=(16,10), 
                       cmap='viridis', 
                       land_only = False,
-                      levels=30): # Added levels arg
+                      levels=30,
+                      save_plot_path = None): # Added levels arg
         """
         Plot temporal standard deviation of a climate variable.
         
@@ -464,6 +552,8 @@ class PlotsAccessor:
             If True, mask out ocean areas to show land-only data.
         levels : int or array-like, default 30
             Number of contour levels or explicit level boundaries for contourf.
+        save_plot_path : str, optional
+            Path where the plot should be saved. If None (default), the plot is not saved.
             
         Returns
         -------
@@ -583,7 +673,6 @@ class PlotsAccessor:
         elif level_op == 'range_selected':
             title += " (Level Mean)"
 
-        # Add time range if available
         # Add time range information
         try:
             # Extract directly from the data
@@ -611,6 +700,10 @@ class PlotsAccessor:
         except ValueError as e:
              print(f"Warning: Could not automatically set extent: {e}")
 
+        # Save plot if path is provided
+        if save_plot_path is not None:
+            plt.savefig(save_plot_path, bbox_inches='tight', dpi=300)
+            print(f"Plot saved to: {save_plot_path}")
         return ax
     
 __all__ = ['PlotsAccessor']

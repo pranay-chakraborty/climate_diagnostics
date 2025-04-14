@@ -154,7 +154,7 @@ ds.climate_plots.plot_std_time(
 ### Setting up the development environment
 
 ```bash
-git clone https://github.com/pranay-chakraborty/climate_diagnostics.git # Replace with your actual repo URL
+git clone https://github.com/pranay-chakraborty/climate_diagnostics.git 
 cd climate_diagnostics
 conda env create -f environment.yml
 conda activate climate-diagnostics

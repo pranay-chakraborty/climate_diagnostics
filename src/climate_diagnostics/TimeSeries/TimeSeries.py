@@ -217,9 +217,17 @@ class TimeSeriesAccessor:
 
         return data_var
 
-    def plot_time_series(self, latitude=None, longitude=None, level=None,
-                         time_range=None, variable='air', figsize=(16, 10),
-                         season='annual', year=None, area_weighted=True):
+    def plot_time_series(self, 
+                         latitude=None, 
+                         longitude=None, 
+                         level=None,
+                         time_range=None, 
+                         variable='air', 
+                         figsize=(16, 10),
+                         season='annual', 
+                         year=None, 
+                         area_weighted=True,
+                         save_plot_path = None):
         """
         Plot time series of spatial standard deviation.
     
@@ -245,6 +253,8 @@ class TimeSeriesAccessor:
             Season to filter by ('annual', 'jjas', 'djf', 'mam', 'son')
         area_weighted : bool, default True
             Whether to use cosine(latitude) weighting for spatial standard deviation
+        save_plot_path : str, optional
+            Path where the plot should be saved. If None (default), the plot is not saved.
             
         Returns
         -------
@@ -302,12 +312,24 @@ class TimeSeriesAccessor:
 
         ax.grid(True, linestyle='--', alpha=0.7)
         plt.tight_layout()
+        # Save plot if path is provided
+        if save_plot_path is not None:
+            plt.savefig(save_plot_path, bbox_inches='tight', dpi=300)
+            print(f"Plot saved to: {save_plot_path}")
+        
         return ax
 
 
-    def plot_std_space(self, latitude=None, longitude=None, level=None,
-                       time_range=None, variable='air', figsize=(16, 10),
-                       season='annual', area_weighted=True):
+    def plot_std_space(self, 
+                       latitude=None, 
+                       longitude=None, 
+                       level=None,
+                       time_range=None, 
+                       variable='air', 
+                       figsize=(16, 10),
+                       season='annual', 
+                       area_weighted=True,
+                       save_plot_path = None):
         """
         Plot time series of spatial standard deviation.
     
@@ -333,6 +355,8 @@ class TimeSeriesAccessor:
             Season to filter by ('annual', 'jjas', 'djf', 'mam', 'son')
         area_weighted : bool, default True
             Whether to use cosine(latitude) weighting for spatial standard deviation
+        save_plot_path : str, optional
+            Path where the plot should be saved. If None (default), the plot is not saved.
             
         Returns
         -------
@@ -388,6 +412,10 @@ class TimeSeriesAccessor:
 
         ax.grid(True, linestyle='--', alpha=0.7)
         plt.tight_layout()
+        # Save plot if path is provided
+        if save_plot_path is not None:
+            plt.savefig(save_plot_path, bbox_inches='tight', dpi=300)
+            print(f"Plot saved to: {save_plot_path}")
         return ax
 
 
@@ -403,7 +431,8 @@ class TimeSeriesAccessor:
         stl_period=12,
         area_weighted=True,
         plot_results=True,
-        figsize=(16, 10)
+        figsize=(16, 10),
+        save_plot_path = None
     ):
         """
         Decompose a time series into trend, seasonal, and residual components.
@@ -440,6 +469,9 @@ class TimeSeriesAccessor:
             Whether to create and display decomposition plots
         figsize : tuple, default (16, 10)
             Figure size in inches (width, height) when plotting
+        save_plot_path : str, optional
+            Path where the plot should be saved if plot_results is True. 
+            If None (default), the plot is not saved.
             
         Returns
         -------
@@ -536,6 +568,10 @@ class TimeSeriesAccessor:
                 ax.legend(loc='upper left', fontsize='small')
 
             plt.tight_layout(rect=[0, 0.03, 1, 0.97])
+            # Save plot if path is provided
+            if save_plot_path is not None:
+                plt.savefig(save_plot_path, bbox_inches='tight', dpi=300)
+                print(f"Plot saved to: {save_plot_path}")
             return results, fig
         else:
             return results
