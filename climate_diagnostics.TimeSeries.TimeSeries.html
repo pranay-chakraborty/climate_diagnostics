@@ -6,14 +6,14 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>climate_diagnostics.TimeSeries.TimeSeries module &mdash; Climate Diagnostics Toolkit 0.1.0 documentation</title>
+  <title>climate_diagnostics.TimeSeries.TimeSeries module &mdash; Climate Diagnostics Toolkit 0.2.1 documentation</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=e59714d7" />
 
   
       <script src="_static/jquery.js?v=5d32c60e"></script>
       <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="_static/documentation_options.js?v=01f34227"></script>
+      <script src="_static/documentation_options.js?v=37f418d5"></script>
       <script src="_static/doctools.js?v=9bcbadda"></script>
       <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="_static/js/theme.js"></script>
@@ -85,8 +85,277 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
              
-  <section id="climate-diagnostics-timeseries-timeseries-module">
-<h1>climate_diagnostics.TimeSeries.TimeSeries module<a class="headerlink" href="#climate-diagnostics-timeseries-timeseries-module" title="Link to this heading"></a></h1>
+  <section id="module-climate_diagnostics.TimeSeries.TimeSeries">
+<span id="climate-diagnostics-timeseries-timeseries-module"></span><h1>climate_diagnostics.TimeSeries.TimeSeries module<a class="headerlink" href="#module-climate_diagnostics.TimeSeries.TimeSeries" title="Link to this heading"></a></h1>
+<dl class="py class">
+<dt class="sig sig-object py" id="climate_diagnostics.TimeSeries.TimeSeries.TimeSeriesAccessor">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">climate_diagnostics.TimeSeries.TimeSeries.</span></span><span class="sig-name descname"><span class="pre">TimeSeriesAccessor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">xarray_obj</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/climate_diagnostics/TimeSeries/TimeSeries.html#TimeSeriesAccessor"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#climate_diagnostics.TimeSeries.TimeSeries.TimeSeriesAccessor" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
+<blockquote>
+<div><p>Accessor for analyzing and visualizing climate time series from xarray datasets.</p>
+<p>This accessor provides methods for extracting, processing, and visualizing time series
+from climate datasets with support for:
+- Weighted spatial averaging across regions
+- Seasonal filtering and temporal subsetting
+- Vertical level selection
+- Time series decomposition using STL
+- Spatial variability analysis</p>
+</div></blockquote>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">xarray</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">xr</span>
+<span class="go"> &gt;&gt;&gt; from climate_diagnostics import register_accessors</span>
+<span class="go"> &gt;&gt;&gt; ds = xr.open_dataset(&quot;climate_data.nc&quot;)</span>
+<span class="go"> &gt;&gt;&gt;</span>
+<span class="go"> &gt;&gt;&gt; # Plot time series of temperature averaged over a given slice</span>
+<span class="go"> &gt;&gt;&gt; ds.climate_timeseries.plot_time_series(</span>
+<span class="go"> ...     variable=&quot;air&quot;,</span>
+<span class="go"> ...     latitude=slice(60, 6),</span>
+<span class="go"> ...     longitude=slice(60, 110),</span>
+<span class="go"> ...     season=&quot;annual&quot;</span>
+<span class="go"> ... )</span>
+<span class="go"> &gt;&gt;&gt;</span>
+<span class="go"> &gt;&gt;&gt; # Plot monsoon precipitation time series with area weighting</span>
+<span class="go"> &gt;&gt;&gt; ds.climate_timeseries.plot_time_series(</span>
+<span class="go"> ...     variable=&quot;prate&quot;,</span>
+<span class="go"> ...     latitude=slice(60, 4),</span>
+<span class="go"> ...     longitude=slice(60, 100),</span>
+<span class="go"> ...     season=&quot;jjas&quot;,</span>
+<span class="go"> ...     time_range=slice(&quot;2000-01-01&quot;, &quot;2020-12-31&quot;),</span>
+<span class="go"> ...     area_weighted=True</span>
+<span class="go"> ... )</span>
+<span class="go"> &gt;&gt;&gt;</span>
+<span class="go"> &gt;&gt;&gt; # Decompose precipitation time series into trend and seasonal components</span>
+<span class="go"> &gt;&gt;&gt; decomp = ds.climate_timeseries.decompose_time_series(</span>
+<span class="go"> ...     variable=&quot;prate&quot;,</span>
+<span class="go"> ...     level=850,</span>
+<span class="go"> ...     stl_period=12,  # Monthly data</span>
+<span class="go"> ...     plot_results=True</span>
+<span class="go"> ... )</span>
+</pre></div>
+</div>
+<p>Initialize the accessor with the provided xarray Dataset.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>xarray_obj</strong> (<a class="reference external" href="https://docs.xarray.dev/en/stable/generated/xarray.Dataset.html#xarray.Dataset" title="(in xarray v2025.3.2.dev0)"><em>xarray.Dataset</em></a>) – The Dataset object this accessor is attached to</p>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="climate_diagnostics.TimeSeries.TimeSeries.TimeSeriesAccessor.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">xarray_obj</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/climate_diagnostics/TimeSeries/TimeSeries.html#TimeSeriesAccessor.__init__"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#climate_diagnostics.TimeSeries.TimeSeries.TimeSeriesAccessor.__init__" title="Link to this definition"></a></dt>
+<dd><p>Initialize the accessor with the provided xarray Dataset.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>xarray_obj</strong> (<a class="reference external" href="https://docs.xarray.dev/en/stable/generated/xarray.Dataset.html#xarray.Dataset" title="(in xarray v2025.3.2.dev0)"><em>xarray.Dataset</em></a>) – The Dataset object this accessor is attached to</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="climate_diagnostics.TimeSeries.TimeSeries.TimeSeriesAccessor.plot_time_series">
+<span class="sig-name descname"><span class="pre">plot_time_series</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">latitude</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">longitude</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">level</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time_range</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">variable</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'air'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">figsize</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">(16,</span> <span class="pre">10)</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">season</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'annual'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">year</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">area_weighted</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">save_plot_path</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/climate_diagnostics/TimeSeries/TimeSeries.html#TimeSeriesAccessor.plot_time_series"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#climate_diagnostics.TimeSeries.TimeSeries.TimeSeriesAccessor.plot_time_series" title="Link to this definition"></a></dt>
+<dd><p>Plot time series of spatial standard deviation.</p>
+<p>Creates a time series plot showing how the spatial variability (standard deviation)
+of the selected variable evolves over time, with optional area-weighting
+and seasonal/temporal filtering.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>latitude</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.13)"><em>list</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/library/functions.html#slice" title="(in Python v3.13)"><em>slice</em></a><em>, or </em><em>None</em>) – Latitude selection criteria for spatial subsetting</p></li>
+<li><p><strong>longitude</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.13)"><em>list</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/library/functions.html#slice" title="(in Python v3.13)"><em>slice</em></a><em>, or </em><em>None</em>) – Longitude selection criteria for spatial subsetting</p></li>
+<li><p><strong>level</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.13)"><em>list</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/library/functions.html#slice" title="(in Python v3.13)"><em>slice</em></a><em>, or </em><em>None</em>) – Vertical level selection criteria. Multiple levels will be averaged.</p></li>
+<li><p><strong>time_range</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#slice" title="(in Python v3.13)"><em>slice</em></a><em> or </em><em>None</em>) – Time range to include in the plot</p></li>
+<li><p><strong>variable</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>default 'air'</em>) – Name of the variable to analyze</p></li>
+<li><p><strong>figsize</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.13)"><em>tuple</em></a><em>, </em><em>default</em><em> (</em><em>16</em><em>, </em><em>10</em><em>)</em>) – Figure size in inches (width, height)</p></li>
+<li><p><strong>season</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>default 'annual'</em>) – Season to filter by (‘annual’, ‘jjas’, ‘djf’, ‘mam’, ‘son’)</p></li>
+<li><p><strong>area_weighted</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a><em>, </em><em>default True</em>) – Whether to use cosine(latitude) weighting for spatial standard deviation</p></li>
+<li><p><strong>save_plot_path</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>optional</em>) – Path where the plot should be saved. If None (default), the plot is not saved.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The plot’s axes object for further customization</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://matplotlib.org/stable/api/_as_gen/matplotlib.axes.Axes.html#matplotlib.axes.Axes" title="(in Matplotlib v3.10.1)">matplotlib.axes.Axes</a></p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.13)"><strong>ValueError</strong></a> – If time dimension is not found or if no spatial dimensions exist</p>
+</dd>
+</dl>
+<p class="rubric">Notes</p>
+<ul class="simple">
+<li><p>Area weighting is applied using cosine of latitude when enabled</p></li>
+<li><p>For Dask arrays, computation is performed with a progress bar</p></li>
+<li><p>The plot displays appropriate units and metadata from the variable attributes</p></li>
+<li><p>Grid lines are added for better readability</p></li>
+</ul>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="c1"># Basic time series of temperature over a region</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">ds</span><span class="o">.</span><span class="n">climate_timeseries</span><span class="o">.</span><span class="n">plot_time_series</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">variable</span><span class="o">=</span><span class="s1">&#39;air&#39;</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">latitude</span><span class="o">=</span><span class="nb">slice</span><span class="p">(</span><span class="mi">40</span><span class="p">,</span> <span class="mi">6</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="n">longitude</span><span class="o">=</span><span class="nb">slice</span><span class="p">(</span><span class="mi">60</span><span class="p">,</span> <span class="mi">100</span><span class="p">)</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Compare winter temperature from specific pressure level</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">ds</span><span class="o">.</span><span class="n">climate_timeseries</span><span class="o">.</span><span class="n">plot_time_series</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">variable</span><span class="o">=</span><span class="s1">&#39;air&#39;</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">level</span><span class="o">=</span><span class="mi">500</span><span class="p">,</span>  <span class="c1"># 500 hPa</span>
+<span class="gp">... </span>    <span class="n">season</span><span class="o">=</span><span class="s1">&#39;djf&#39;</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">time_range</span><span class="o">=</span><span class="nb">slice</span><span class="p">(</span><span class="s1">&#39;2000-01-01&#39;</span><span class="p">,</span> <span class="s1">&#39;2020-12-31&#39;</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="n">save_plot_path</span><span class="o">=</span><span class="s1">&#39;/home/user/Downloads/winter_temp_500hPa.png&#39;</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Time series of precipitation without area weighting</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">ax</span> <span class="o">=</span> <span class="n">ds</span><span class="o">.</span><span class="n">climate_timeseries</span><span class="o">.</span><span class="n">plot_time_series</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">variable</span><span class="o">=</span><span class="s1">&#39;prate&#39;</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">latitude</span><span class="o">=</span><span class="nb">slice</span><span class="p">(</span><span class="mi">40</span><span class="p">,</span> <span class="mi">6</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="n">longitude</span><span class="o">=</span><span class="nb">slice</span><span class="p">(</span><span class="mi">60</span><span class="p">,</span><span class="mi">110</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="n">area_weighted</span><span class="o">=</span><span class="kc">False</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Customize the plot further</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">ax</span><span class="o">.</span><span class="n">set_ylim</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">10</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">ax</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s1">&#39;Tropical Precipitation&#39;</span><span class="p">)</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="climate_diagnostics.TimeSeries.TimeSeries.TimeSeriesAccessor.plot_std_space">
+<span class="sig-name descname"><span class="pre">plot_std_space</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">latitude</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">longitude</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">level</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time_range</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">variable</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'air'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">figsize</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">(16,</span> <span class="pre">10)</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">season</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'annual'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">area_weighted</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">save_plot_path</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/climate_diagnostics/TimeSeries/TimeSeries.html#TimeSeriesAccessor.plot_std_space"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#climate_diagnostics.TimeSeries.TimeSeries.TimeSeriesAccessor.plot_std_space" title="Link to this definition"></a></dt>
+<dd><p>Plot time series of spatial standard deviation.</p>
+<p>Creates a time series plot showing how the spatial variability (standard deviation)
+of the selected variable evolves over time, with optional area-weighting
+and seasonal/temporal filtering.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>latitude</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.13)"><em>list</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/library/functions.html#slice" title="(in Python v3.13)"><em>slice</em></a><em>, or </em><em>None</em>) – Latitude selection criteria for spatial subsetting</p></li>
+<li><p><strong>longitude</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.13)"><em>list</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/library/functions.html#slice" title="(in Python v3.13)"><em>slice</em></a><em>, or </em><em>None</em>) – Longitude selection criteria for spatial subsetting</p></li>
+<li><p><strong>level</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.13)"><em>list</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/library/functions.html#slice" title="(in Python v3.13)"><em>slice</em></a><em>, or </em><em>None</em>) – Vertical level selection criteria. Multiple levels will be averaged.</p></li>
+<li><p><strong>time_range</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#slice" title="(in Python v3.13)"><em>slice</em></a><em> or </em><em>None</em>) – Time range to include in the plot</p></li>
+<li><p><strong>variable</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>default 'air'</em>) – Name of the variable to analyze</p></li>
+<li><p><strong>figsize</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.13)"><em>tuple</em></a><em>, </em><em>default</em><em> (</em><em>16</em><em>, </em><em>10</em><em>)</em>) – Figure size in inches (width, height)</p></li>
+<li><p><strong>season</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>default 'annual'</em>) – Season to filter by (‘annual’, ‘jjas’, ‘djf’, ‘mam’, ‘son’)</p></li>
+<li><p><strong>area_weighted</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a><em>, </em><em>default True</em>) – Whether to use cosine(latitude) weighting for spatial standard deviation</p></li>
+<li><p><strong>save_plot_path</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>optional</em>) – Path where the plot should be saved. If None (default), the plot is not saved.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The plot’s axes object for further customization</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://matplotlib.org/stable/api/_as_gen/matplotlib.axes.Axes.html#matplotlib.axes.Axes" title="(in Matplotlib v3.10.1)">matplotlib.axes.Axes</a></p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.13)"><strong>ValueError</strong></a> – If time dimension is not found or if no spatial dimensions exist</p>
+</dd>
+</dl>
+<p class="rubric">Notes</p>
+<ul class="simple">
+<li><p>This method is particularly useful for analyzing the variability across regions</p></li>
+<li><p>Higher standard deviation values indicate greater spatial heterogeneity</p></li>
+<li><p>Area weighting accounts for the decreasing grid cell size toward the poles</p></li>
+<li><p>The computation uses Dask’s progress bar</p></li>
+</ul>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="c1"># Basic spatial variability of temperature over time</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">ds</span><span class="o">.</span><span class="n">climate_timeseries</span><span class="o">.</span><span class="n">plot_std_space</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">variable</span><span class="o">=</span><span class="s1">&#39;air&#39;</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">longitude</span> <span class="o">=</span> <span class="nb">slice</span><span class="p">(</span><span class="mi">40</span><span class="p">,</span><span class="mi">6</span><span class="p">)</span>
+<span class="gp">... </span>    <span class="n">latitude</span><span class="o">=</span><span class="nb">slice</span><span class="p">(</span><span class="mi">60</span><span class="p">,</span><span class="mi">110</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="n">area_weighted</span><span class="o">=</span><span class="kc">True</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Regional monsoon precipitation variability</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">ax</span> <span class="o">=</span> <span class="n">ds</span><span class="o">.</span><span class="n">climate_timeseries</span><span class="o">.</span><span class="n">plot_std_space</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">variable</span><span class="o">=</span><span class="s1">&#39;prate&#39;</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">latitude</span><span class="o">=</span><span class="nb">slice</span><span class="p">(</span><span class="mi">40</span><span class="p">,</span> <span class="mi">6</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="n">longitude</span><span class="o">=</span><span class="nb">slice</span><span class="p">(</span><span class="mi">60</span><span class="p">,</span> <span class="mi">110</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="n">season</span><span class="o">=</span><span class="s1">&#39;jjas&#39;</span><span class="p">,</span>  <span class="c1"># Summer monsoon</span>
+<span class="gp">... </span>    <span class="n">time_range</span><span class="o">=</span><span class="nb">slice</span><span class="p">(</span><span class="s1">&#39;1980-01-01&#39;</span><span class="p">,</span> <span class="s1">&#39;2020-12-31&#39;</span><span class="p">)</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># spatial variability at different atmospheric levels</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">ds</span><span class="o">.</span><span class="n">climate_timeseries</span><span class="o">.</span><span class="n">plot_std_space</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">variable</span><span class="o">=</span><span class="s1">&#39;geopotential_height&#39;</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">level</span><span class="o">=</span><span class="mi">850</span><span class="p">,</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">ds</span><span class="o">.</span><span class="n">climate_timeseries</span><span class="o">.</span><span class="n">plot_std_space</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">variable</span><span class="o">=</span><span class="s1">&#39;geopotential_height&#39;</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">level</span><span class="o">=</span><span class="mi">500</span><span class="p">,</span>
+<span class="gp">... </span><span class="p">)</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="climate_diagnostics.TimeSeries.TimeSeries.TimeSeriesAccessor.decompose_time_series">
+<span class="sig-name descname"><span class="pre">decompose_time_series</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">variable</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'air'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">level</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">latitude</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">longitude</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time_range</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">season</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'annual'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">stl_seasonal</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">13</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">stl_period</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">12</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">area_weighted</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">plot_results</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">figsize</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">(16,</span> <span class="pre">10)</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">save_plot_path</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/climate_diagnostics/TimeSeries/TimeSeries.html#TimeSeriesAccessor.decompose_time_series"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#climate_diagnostics.TimeSeries.TimeSeries.TimeSeriesAccessor.decompose_time_series" title="Link to this definition"></a></dt>
+<dd><p>Decompose a time series into trend, seasonal, and residual components.</p>
+<p>Applies the Seasonal-Trend decomposition using LOESS (STL) to the spatially
+averaged time series. The decomposition separates the time series into:
+- Trend component (long-term change)
+- Seasonal component (recurring patterns)
+- Residual component (remaining variation)</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>variable</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>default 'air'</em>) – Name of the variable to decompose</p></li>
+<li><p><strong>level</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.13)"><em>list</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/library/functions.html#slice" title="(in Python v3.13)"><em>slice</em></a><em>, or </em><em>None</em>) – Vertical level selection criteria. Multiple levels will be averaged.</p></li>
+<li><p><strong>latitude</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.13)"><em>list</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/library/functions.html#slice" title="(in Python v3.13)"><em>slice</em></a><em>, or </em><em>None</em>) – Latitude selection criteria for spatial subsetting</p></li>
+<li><p><strong>longitude</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.13)"><em>list</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/library/functions.html#slice" title="(in Python v3.13)"><em>slice</em></a><em>, or </em><em>None</em>) – Longitude selection criteria for spatial subsetting</p></li>
+<li><p><strong>time_range</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#slice" title="(in Python v3.13)"><em>slice</em></a><em> or </em><em>None</em>) – Time range to include in the decomposition</p></li>
+<li><p><strong>season</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>default 'annual'</em>) – Season to filter by (‘annual’, ‘jjas’, ‘djf’, ‘mam’, ‘son’)</p></li>
+<li><p><strong>stl_seasonal</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a><em>, </em><em>default 13</em>) – STL decomposition parameter: Length of the seasonal smoother.
+Must be odd; if even, will be incremented by 1.</p></li>
+<li><p><strong>stl_period</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a><em>, </em><em>default 12</em>) – STL decomposition parameter: Period of the seasonal component
+(e.g., 12 for monthly data, 4 for quarterly data)</p></li>
+<li><p><strong>area_weighted</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a><em>, </em><em>default True</em>) – Whether to use cosine(latitude) weighting for spatial averaging</p></li>
+<li><p><strong>plot_results</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a><em>, </em><em>default True</em>) – Whether to create and display decomposition plots</p></li>
+<li><p><strong>figsize</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.13)"><em>tuple</em></a><em>, </em><em>default</em><em> (</em><em>16</em><em>, </em><em>10</em><em>)</em>) – Figure size in inches (width, height) when plotting</p></li>
+<li><p><strong>save_plot_path</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>optional</em>) – Path where the plot should be saved if plot_results is True.
+If None (default), the plot is not saved.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>If plot_results is False, returns a dictionary with the decomposition components
+(original, trend, seasonal, residual).
+If plot_results is True, returns a tuple (dictionary, figure) with both the
+decomposition components and the matplotlib figure object.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.13)">dict</a> or <a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.13)">tuple</a></p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.13)"><strong>ValueError</strong></a> – If the time series is too short for decomposition or contains invalid values</p>
+</dd>
+</dl>
+<p class="rubric">Notes</p>
+<ul class="simple">
+<li><p>The STL decomposition requires at least 2*period+1 data points</p></li>
+<li><p>For monthly data (period=12), this means at least 25 time points</p></li>
+<li><p>The stl_seasonal parameter controls smoothness of the seasonal component</p></li>
+<li><p>Higher stl_seasonal values result in smoother seasonal components</p></li>
+<li><p>Time series is first spatially averaged (area-weighted) before decomposition</p></li>
+<li><p>The trend component can be used to analyze long-term climate change signals</p></li>
+<li><p>The seasonal component reveals recurring annual patterns</p></li>
+<li><p>The residual component can highlight anomalous events</p></li>
+</ul>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="c1"># Analyze regional precipitation trends without plotting</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">precip_components</span> <span class="o">=</span> <span class="n">ds</span><span class="o">.</span><span class="n">climate_timeseries</span><span class="o">.</span><span class="n">decompose_time_series</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">variable</span><span class="o">=</span><span class="s1">&#39;prate&#39;</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">latitude</span><span class="o">=</span><span class="nb">slice</span><span class="p">(</span><span class="mi">40</span><span class="p">,</span> <span class="mi">6</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="n">longitude</span><span class="o">=</span><span class="nb">slice</span><span class="p">(</span><span class="mi">60</span><span class="p">,</span> <span class="mi">100</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="n">plot_results</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">stl_seasonal</span><span class="o">=</span><span class="mi">13</span><span class="p">,</span>  <span class="c1"># Smoother seasonal component</span>
+<span class="gp">... </span>    <span class="n">stl_period</span><span class="o">=</span><span class="mi">12</span>
+<span class="gp">... </span><span class="p">)</span>
+</pre></div>
+</div>
+</dd></dl>
+
+</dd></dl>
+
 </section>
 
 

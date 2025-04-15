@@ -1,0 +1,880 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>climate_diagnostics.TimeSeries.TimeSeries &mdash; Climate Diagnostics Toolkit 0.2.1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../_static/documentation_options.js?v=37f418d5"></script>
+      <script src="../../../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../index.html" class="icon icon-home">
+            Climate Diagnostics Toolkit
+              <img src="../../../_static/WeCLiMb_LOGO_1.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../modules.html">API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">Climate Diagnostics Toolkit</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">climate_diagnostics.TimeSeries.TimeSeries</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for climate_diagnostics.TimeSeries.TimeSeries</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span><span class="w"> </span><span class="nn">xarray</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">xr</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.pyplot</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">plt</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">dask.diagnostics</span><span class="w"> </span><span class="kn">import</span> <span class="n">ProgressBar</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">statsmodels.tsa.seasonal</span><span class="w"> </span><span class="kn">import</span> <span class="n">STL</span>
+
+<div class="viewcode-block" id="TimeSeriesAccessor">
+<a class="viewcode-back" href="../../../climate_diagnostics.TimeSeries.TimeSeries.html#climate_diagnostics.TimeSeries.TimeSeries.TimeSeriesAccessor">[docs]</a>
+<span class="nd">@xr</span><span class="o">.</span><span class="n">register_dataset_accessor</span><span class="p">(</span><span class="s2">&quot;climate_timeseries&quot;</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">TimeSeriesAccessor</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Accessor for analyzing and visualizing climate time series from xarray datasets.</span>
+<span class="sd">    </span>
+<span class="sd">    This accessor provides methods for extracting, processing, and visualizing time series</span>
+<span class="sd">    from climate datasets with support for:</span>
+<span class="sd">    - Weighted spatial averaging across regions</span>
+<span class="sd">    - Seasonal filtering and temporal subsetting</span>
+<span class="sd">    - Vertical level selection</span>
+<span class="sd">    - Time series decomposition using STL</span>
+<span class="sd">    - Spatial variability analysis</span>
+<span class="sd">    </span>
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">   &gt;&gt;&gt; import xarray as xr</span>
+<span class="sd">    &gt;&gt;&gt; from climate_diagnostics import register_accessors</span>
+<span class="sd">    &gt;&gt;&gt; ds = xr.open_dataset(&quot;climate_data.nc&quot;)</span>
+<span class="sd">    &gt;&gt;&gt; </span>
+<span class="sd">    &gt;&gt;&gt; # Plot time series of temperature averaged over a given slice</span>
+<span class="sd">    &gt;&gt;&gt; ds.climate_timeseries.plot_time_series(</span>
+<span class="sd">    ...     variable=&quot;air&quot;,</span>
+<span class="sd">    ...     latitude=slice(60, 6),</span>
+<span class="sd">    ...     longitude=slice(60, 110),</span>
+<span class="sd">    ...     season=&quot;annual&quot;</span>
+<span class="sd">    ... )</span>
+<span class="sd">    &gt;&gt;&gt; </span>
+<span class="sd">    &gt;&gt;&gt; # Plot monsoon precipitation time series with area weighting</span>
+<span class="sd">    &gt;&gt;&gt; ds.climate_timeseries.plot_time_series(</span>
+<span class="sd">    ...     variable=&quot;prate&quot;, </span>
+<span class="sd">    ...     latitude=slice(60, 4),</span>
+<span class="sd">    ...     longitude=slice(60, 100), </span>
+<span class="sd">    ...     season=&quot;jjas&quot;,</span>
+<span class="sd">    ...     time_range=slice(&quot;2000-01-01&quot;, &quot;2020-12-31&quot;),</span>
+<span class="sd">    ...     area_weighted=True</span>
+<span class="sd">    ... )</span>
+<span class="sd">    &gt;&gt;&gt; </span>
+<span class="sd">    &gt;&gt;&gt; # Decompose precipitation time series into trend and seasonal components</span>
+<span class="sd">    &gt;&gt;&gt; decomp = ds.climate_timeseries.decompose_time_series(</span>
+<span class="sd">    ...     variable=&quot;prate&quot;, </span>
+<span class="sd">    ...     level=850,</span>
+<span class="sd">    ...     stl_period=12,  # Monthly data</span>
+<span class="sd">    ...     plot_results=True</span>
+<span class="sd">    ... )</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+<div class="viewcode-block" id="TimeSeriesAccessor.__init__">
+<a class="viewcode-back" href="../../../climate_diagnostics.TimeSeries.TimeSeries.html#climate_diagnostics.TimeSeries.TimeSeries.TimeSeriesAccessor.__init__">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">xarray_obj</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Initialize the accessor with the provided xarray Dataset.</span>
+<span class="sd">        </span>
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        xarray_obj : xarray.Dataset</span>
+<span class="sd">            The Dataset object this accessor is attached to</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_obj</span> <span class="o">=</span> <span class="n">xarray_obj</span></div>
+
+
+    
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_filter_by_season</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data_subset</span><span class="p">,</span> <span class="n">season</span><span class="o">=</span><span class="s1">&#39;annual&#39;</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Filter data subset by meteorological season.</span>
+<span class="sd">    </span>
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        data_subset : xarray.Dataset or xarray.DataArray</span>
+<span class="sd">            Data to be filtered by season</span>
+<span class="sd">        season : str, default &#39;annual&#39;</span>
+<span class="sd">            Meteorological season to filter by. Options:</span>
+<span class="sd">            - &#39;annual&#39;: All seasons (no filtering)</span>
+<span class="sd">            - &#39;jjas&#39;: June, July, August, September (summer monsoon)</span>
+<span class="sd">            - &#39;djf&#39;: December, January, February (winter)</span>
+<span class="sd">            - &#39;mam&#39;: March, April, May (spring)</span>
+<span class="sd">            - &#39;son&#39;: September, October, November (fall)</span>
+<span class="sd">        </span>
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        xarray.Dataset or xarray.DataArray</span>
+<span class="sd">            Filtered data containing only the specified season</span>
+<span class="sd">            </span>
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If time dimension is missing or month information cannot be determined</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">season</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="o">==</span> <span class="s1">&#39;annual&#39;</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">data_subset</span>
+        <span class="k">if</span> <span class="s1">&#39;time&#39;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">data_subset</span><span class="o">.</span><span class="n">dims</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Cannot filter by season - &#39;time&#39; dimension not found.&quot;</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="s1">&#39;month&#39;</span> <span class="ow">in</span> <span class="n">data_subset</span><span class="o">.</span><span class="n">coords</span><span class="p">:</span>
+            <span class="n">month_coord</span> <span class="o">=</span> <span class="n">data_subset</span><span class="p">[</span><span class="s1">&#39;month&#39;</span><span class="p">]</span>
+        <span class="k">elif</span> <span class="n">np</span><span class="o">.</span><span class="n">issubdtype</span><span class="p">(</span><span class="n">data_subset</span><span class="p">[</span><span class="s1">&#39;time&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">datetime64</span><span class="p">):</span>
+             <span class="n">month_coord</span> <span class="o">=</span> <span class="n">data_subset</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">dt</span><span class="o">.</span><span class="n">month</span>
+        <span class="k">else</span><span class="p">:</span>
+             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Cannot determine month for seasonal filtering.&quot;</span><span class="p">)</span>
+
+        <span class="n">season_months</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;jjas&#39;</span><span class="p">:</span> <span class="p">[</span><span class="mi">6</span><span class="p">,</span> <span class="mi">7</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">9</span><span class="p">],</span> <span class="s1">&#39;djf&#39;</span><span class="p">:</span> <span class="p">[</span><span class="mi">12</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">],</span> <span class="s1">&#39;mam&#39;</span><span class="p">:</span> <span class="p">[</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">],</span> <span class="s1">&#39;son&#39;</span><span class="p">:</span> <span class="p">[</span><span class="mi">9</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">11</span><span class="p">]}</span>
+        <span class="n">selected_months</span> <span class="o">=</span> <span class="n">season_months</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">season</span><span class="o">.</span><span class="n">lower</span><span class="p">())</span>
+
+        <span class="k">if</span> <span class="n">selected_months</span><span class="p">:</span>
+            <span class="n">filtered_data</span> <span class="o">=</span> <span class="n">data_subset</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">month_coord</span><span class="o">.</span><span class="n">isin</span><span class="p">(</span><span class="n">selected_months</span><span class="p">),</span> <span class="n">drop</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">filtered_data</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">size</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                 <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Warning: No data found for season &#39;</span><span class="si">{</span><span class="n">season</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span><span class="si">}</span><span class="s2">&#39; within the selected time range.&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">filtered_data</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Warning: Unknown season &#39;</span><span class="si">{</span><span class="n">season</span><span class="si">}</span><span class="s2">&#39;. Returning unfiltered data.&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">data_subset</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_select_process_data</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">variable</span><span class="p">,</span> <span class="n">latitude</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">longitude</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">level</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">time_range</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">season</span><span class="o">=</span><span class="s1">&#39;annual&#39;</span><span class="p">,</span> <span class="n">year</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Select and process data based on specified parameters.</span>
+<span class="sd">    </span>
+<span class="sd">        This helper method handles data selection and filtering based on:</span>
+<span class="sd">        - Variable selection</span>
+<span class="sd">        - Spatial subsetting (latitude/longitude)</span>
+<span class="sd">        - Vertical level selection</span>
+<span class="sd">        - Temporal filtering (time range, season, year)</span>
+<span class="sd">        </span>
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        variable : str</span>
+<span class="sd">            Name of the variable to select from the dataset</span>
+<span class="sd">        latitude : float, list, slice, or None</span>
+<span class="sd">            Latitude selection criteria</span>
+<span class="sd">        longitude : float, list, slice, or None</span>
+<span class="sd">            Longitude selection criteria</span>
+<span class="sd">        level : float, int, list, slice, or None</span>
+<span class="sd">            Vertical level selection criteria. If a slice or list is provided,</span>
+<span class="sd">            the levels will be averaged.</span>
+<span class="sd">        time_range : slice or None</span>
+<span class="sd">            Time range selection criteria</span>
+<span class="sd">        season : str, default &#39;annual&#39;</span>
+<span class="sd">            Season to filter by (&#39;annual&#39;, &#39;jjas&#39;, &#39;djf&#39;, &#39;mam&#39;, &#39;son&#39;)</span>
+<span class="sd">        year : int or None</span>
+<span class="sd">            Specific year to filter by</span>
+<span class="sd">            </span>
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        xarray.DataArray</span>
+<span class="sd">            Processed data subset based on the specified selection criteria</span>
+<span class="sd">            </span>
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If the dataset is not loaded, variable doesn&#39;t exist, or if specified selections </span>
+<span class="sd">            result in empty data</span>
+<span class="sd">            </span>
+<span class="sd">        Notes</span>
+<span class="sd">        -----</span>
+<span class="sd">        This method handles both exact coordinate matching and nearest-neighbor selection</span>
+<span class="sd">        when appropriate. For level selection, it will automatically average multiple levels</span>
+<span class="sd">        if a slice or list is provided.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">data_filtered</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_obj</span>
+
+        <span class="k">if</span> <span class="s1">&#39;time&#39;</span> <span class="ow">in</span> <span class="n">data_filtered</span><span class="o">.</span><span class="n">dims</span><span class="p">:</span>
+            <span class="n">data_filtered</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_filter_by_season</span><span class="p">(</span><span class="n">data_filtered</span><span class="p">,</span> <span class="n">season</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">data_filtered</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">size</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;No data available for season &#39;</span><span class="si">{</span><span class="n">season</span><span class="si">}</span><span class="s2">&#39;.&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">year</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="n">year_match</span> <span class="o">=</span> <span class="n">data_filtered</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">dt</span><span class="o">.</span><span class="n">year</span> <span class="o">==</span> <span class="n">year</span>
+                <span class="k">except</span> <span class="ne">TypeError</span><span class="p">:</span>
+                    <span class="n">year_match</span> <span class="o">=</span> <span class="n">xr</span><span class="o">.</span><span class="n">DataArray</span><span class="p">([</span><span class="n">t</span><span class="o">.</span><span class="n">year</span> <span class="o">==</span> <span class="n">year</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">data_filtered</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">values</span><span class="p">],</span>
+                                            <span class="n">coords</span><span class="o">=</span><span class="p">{</span><span class="s1">&#39;time&#39;</span><span class="p">:</span> <span class="n">data_filtered</span><span class="o">.</span><span class="n">time</span><span class="p">},</span> <span class="n">dims</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;time&#39;</span><span class="p">])</span>
+                <span class="n">data_filtered</span> <span class="o">=</span> <span class="n">data_filtered</span><span class="o">.</span><span class="n">sel</span><span class="p">(</span><span class="n">time</span><span class="o">=</span><span class="n">year_match</span><span class="p">)</span>
+
+                <span class="k">if</span> <span class="n">data_filtered</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">size</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;No data available for year </span><span class="si">{</span><span class="n">year</span><span class="si">}</span><span class="s2"> within season &#39;</span><span class="si">{</span><span class="n">season</span><span class="si">}</span><span class="s2">&#39;.&quot;</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">season</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="o">!=</span> <span class="s1">&#39;annual&#39;</span> <span class="ow">or</span> <span class="n">year</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Warning: Cannot filter by season or year - &#39;time&#39; dimension not found.&quot;</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">variable</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">data_filtered</span><span class="o">.</span><span class="n">data_vars</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Variable &#39;</span><span class="si">{</span><span class="n">variable</span><span class="si">}</span><span class="s2">&#39; not found. Available: </span><span class="si">{</span><span class="nb">list</span><span class="p">(</span><span class="n">data_filtered</span><span class="o">.</span><span class="n">data_vars</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="n">data_var</span> <span class="o">=</span> <span class="n">data_filtered</span><span class="p">[</span><span class="n">variable</span><span class="p">]</span>
+
+        <span class="n">selection_dict</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="n">needs_nearest</span> <span class="o">=</span> <span class="kc">False</span>
+
+        <span class="c1"># Validate latitude coordinates</span>
+        <span class="k">if</span> <span class="n">latitude</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="s1">&#39;lat&#39;</span> <span class="ow">in</span> <span class="n">data_var</span><span class="o">.</span><span class="n">coords</span><span class="p">:</span>
+            <span class="n">lat_min</span><span class="p">,</span> <span class="n">lat_max</span> <span class="o">=</span> <span class="n">data_var</span><span class="o">.</span><span class="n">lat</span><span class="o">.</span><span class="n">min</span><span class="p">()</span><span class="o">.</span><span class="n">item</span><span class="p">(),</span> <span class="n">data_var</span><span class="o">.</span><span class="n">lat</span><span class="o">.</span><span class="n">max</span><span class="p">()</span><span class="o">.</span><span class="n">item</span><span class="p">()</span>
+            
+            <span class="c1"># Check if latitude selection is completely outside the available range</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">latitude</span><span class="p">,</span> <span class="nb">slice</span><span class="p">):</span>
+                <span class="k">if</span> <span class="n">latitude</span><span class="o">.</span><span class="n">start</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">latitude</span><span class="o">.</span><span class="n">start</span> <span class="o">&gt;</span> <span class="n">lat_max</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Requested latitude minimum </span><span class="si">{</span><span class="n">latitude</span><span class="o">.</span><span class="n">start</span><span class="si">}</span><span class="s2"> is greater than available maximum </span><span class="si">{</span><span class="n">lat_max</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">latitude</span><span class="o">.</span><span class="n">stop</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">latitude</span><span class="o">.</span><span class="n">stop</span> <span class="o">&lt;</span> <span class="n">lat_min</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Requested latitude maximum </span><span class="si">{</span><span class="n">latitude</span><span class="o">.</span><span class="n">stop</span><span class="si">}</span><span class="s2"> is less than available minimum </span><span class="si">{</span><span class="n">lat_min</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">latitude</span><span class="p">,</span> <span class="p">(</span><span class="nb">list</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)):</span>
+                <span class="k">if</span> <span class="nb">min</span><span class="p">(</span><span class="n">latitude</span><span class="p">)</span> <span class="o">&gt;</span> <span class="n">lat_max</span> <span class="ow">or</span> <span class="nb">max</span><span class="p">(</span><span class="n">latitude</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">lat_min</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Requested latitudes [</span><span class="si">{</span><span class="nb">min</span><span class="p">(</span><span class="n">latitude</span><span class="p">)</span><span class="si">}</span><span class="s2">, </span><span class="si">{</span><span class="nb">max</span><span class="p">(</span><span class="n">latitude</span><span class="p">)</span><span class="si">}</span><span class="s2">] are outside available range [</span><span class="si">{</span><span class="n">lat_min</span><span class="si">}</span><span class="s2">, </span><span class="si">{</span><span class="n">lat_max</span><span class="si">}</span><span class="s2">]&quot;</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>  <span class="c1"># scalar</span>
+                <span class="k">if</span> <span class="n">latitude</span> <span class="o">&lt;</span> <span class="n">lat_min</span> <span class="ow">or</span> <span class="n">latitude</span> <span class="o">&gt;</span> <span class="n">lat_max</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Requested latitude </span><span class="si">{</span><span class="n">latitude</span><span class="si">}</span><span class="s2"> is outside available range [</span><span class="si">{</span><span class="n">lat_min</span><span class="si">}</span><span class="s2">, </span><span class="si">{</span><span class="n">lat_max</span><span class="si">}</span><span class="s2">]&quot;</span><span class="p">)</span>
+            
+            <span class="n">selection_dict</span><span class="p">[</span><span class="s1">&#39;lat&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">latitude</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">latitude</span><span class="p">,</span> <span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">)):</span>
+                <span class="n">needs_nearest</span> <span class="o">=</span> <span class="kc">True</span>
+
+        <span class="c1"># Validate longitude coordinates</span>
+        <span class="k">if</span> <span class="n">longitude</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="s1">&#39;lon&#39;</span> <span class="ow">in</span> <span class="n">data_var</span><span class="o">.</span><span class="n">coords</span><span class="p">:</span>
+            <span class="n">lon_min</span><span class="p">,</span> <span class="n">lon_max</span> <span class="o">=</span> <span class="n">data_var</span><span class="o">.</span><span class="n">lon</span><span class="o">.</span><span class="n">min</span><span class="p">()</span><span class="o">.</span><span class="n">item</span><span class="p">(),</span> <span class="n">data_var</span><span class="o">.</span><span class="n">lon</span><span class="o">.</span><span class="n">max</span><span class="p">()</span><span class="o">.</span><span class="n">item</span><span class="p">()</span>
+            
+            <span class="c1"># Check if longitude selection is completely outside the available range</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">longitude</span><span class="p">,</span> <span class="nb">slice</span><span class="p">):</span>
+                <span class="k">if</span> <span class="n">longitude</span><span class="o">.</span><span class="n">start</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">longitude</span><span class="o">.</span><span class="n">start</span> <span class="o">&gt;</span> <span class="n">lon_max</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Requested longitude minimum </span><span class="si">{</span><span class="n">longitude</span><span class="o">.</span><span class="n">start</span><span class="si">}</span><span class="s2"> is greater than available maximum </span><span class="si">{</span><span class="n">lon_max</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">longitude</span><span class="o">.</span><span class="n">stop</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">longitude</span><span class="o">.</span><span class="n">stop</span> <span class="o">&lt;</span> <span class="n">lon_min</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Requested longitude maximum </span><span class="si">{</span><span class="n">longitude</span><span class="o">.</span><span class="n">stop</span><span class="si">}</span><span class="s2"> is less than available minimum </span><span class="si">{</span><span class="n">lon_min</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">longitude</span><span class="p">,</span> <span class="p">(</span><span class="nb">list</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)):</span>
+                <span class="k">if</span> <span class="nb">min</span><span class="p">(</span><span class="n">longitude</span><span class="p">)</span> <span class="o">&gt;</span> <span class="n">lon_max</span> <span class="ow">or</span> <span class="nb">max</span><span class="p">(</span><span class="n">longitude</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">lon_min</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Requested longitudes [</span><span class="si">{</span><span class="nb">min</span><span class="p">(</span><span class="n">longitude</span><span class="p">)</span><span class="si">}</span><span class="s2">, </span><span class="si">{</span><span class="nb">max</span><span class="p">(</span><span class="n">longitude</span><span class="p">)</span><span class="si">}</span><span class="s2">] are outside available range [</span><span class="si">{</span><span class="n">lon_min</span><span class="si">}</span><span class="s2">, </span><span class="si">{</span><span class="n">lon_max</span><span class="si">}</span><span class="s2">]&quot;</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>  <span class="c1"># scalar</span>
+                <span class="k">if</span> <span class="n">longitude</span> <span class="o">&lt;</span> <span class="n">lon_min</span> <span class="ow">or</span> <span class="n">longitude</span> <span class="o">&gt;</span> <span class="n">lon_max</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Requested longitude </span><span class="si">{</span><span class="n">longitude</span><span class="si">}</span><span class="s2"> is outside available range [</span><span class="si">{</span><span class="n">lon_min</span><span class="si">}</span><span class="s2">, </span><span class="si">{</span><span class="n">lon_max</span><span class="si">}</span><span class="s2">]&quot;</span><span class="p">)</span>
+            
+            <span class="n">selection_dict</span><span class="p">[</span><span class="s1">&#39;lon&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">longitude</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">longitude</span><span class="p">,</span> <span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">)):</span>
+                <span class="n">needs_nearest</span> <span class="o">=</span> <span class="kc">True</span>
+
+        <span class="c1"># Validate time range</span>
+        <span class="k">if</span> <span class="n">time_range</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="s1">&#39;time&#39;</span> <span class="ow">in</span> <span class="n">data_var</span><span class="o">.</span><span class="n">dims</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">time_min</span><span class="p">,</span> <span class="n">time_max</span> <span class="o">=</span> <span class="n">data_var</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">min</span><span class="p">()</span><span class="o">.</span><span class="n">values</span><span class="p">,</span> <span class="n">data_var</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">max</span><span class="p">()</span><span class="o">.</span><span class="n">values</span>
+                
+                <span class="c1"># Check if time selection is completely outside the available range</span>
+                <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">time_range</span><span class="p">,</span> <span class="nb">slice</span><span class="p">):</span>
+                    <span class="k">if</span> <span class="n">time_range</span><span class="o">.</span><span class="n">start</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                        <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">datetime64</span><span class="p">(</span><span class="n">time_range</span><span class="o">.</span><span class="n">start</span><span class="p">)</span> <span class="o">&gt;</span> <span class="n">time_max</span><span class="p">:</span>
+                            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Requested start time </span><span class="si">{</span><span class="n">time_range</span><span class="o">.</span><span class="n">start</span><span class="si">}</span><span class="s2"> is after available maximum </span><span class="si">{</span><span class="n">time_max</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                    <span class="k">if</span> <span class="n">time_range</span><span class="o">.</span><span class="n">stop</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                        <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">datetime64</span><span class="p">(</span><span class="n">time_range</span><span class="o">.</span><span class="n">stop</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">time_min</span><span class="p">:</span>
+                            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Requested end time </span><span class="si">{</span><span class="n">time_range</span><span class="o">.</span><span class="n">stop</span><span class="si">}</span><span class="s2"> is before available minimum </span><span class="si">{</span><span class="n">time_min</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">time_range</span><span class="p">,</span> <span class="p">(</span><span class="nb">list</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)):</span>
+                    <span class="n">t_min</span><span class="p">,</span> <span class="n">t_max</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">min</span><span class="p">(</span><span class="n">time_range</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">time_range</span><span class="p">)</span>
+                    <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">datetime64</span><span class="p">(</span><span class="n">t_min</span><span class="p">)</span> <span class="o">&gt;</span> <span class="n">time_max</span> <span class="ow">or</span> <span class="n">np</span><span class="o">.</span><span class="n">datetime64</span><span class="p">(</span><span class="n">t_max</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">time_min</span><span class="p">:</span>
+                        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Requested time range is outside available range [</span><span class="si">{</span><span class="n">time_min</span><span class="si">}</span><span class="s2">, </span><span class="si">{</span><span class="n">time_max</span><span class="si">}</span><span class="s2">]&quot;</span><span class="p">)</span>
+            <span class="k">except</span> <span class="p">(</span><span class="ne">TypeError</span><span class="p">,</span> <span class="ne">ValueError</span><span class="p">)</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="c1"># If we can&#39;t compare the times, proceed and let xarray handle it</span>
+                <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Warning: Could not validate time range: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            
+            <span class="n">selection_dict</span><span class="p">[</span><span class="s1">&#39;time&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">time_range</span>
+
+        <span class="n">level_dim_name</span> <span class="o">=</span> <span class="nb">next</span><span class="p">((</span><span class="n">dim</span> <span class="k">for</span> <span class="n">dim</span> <span class="ow">in</span> <span class="p">[</span><span class="s1">&#39;level&#39;</span><span class="p">,</span> <span class="s1">&#39;lev&#39;</span><span class="p">]</span> <span class="k">if</span> <span class="n">dim</span> <span class="ow">in</span> <span class="n">data_var</span><span class="o">.</span><span class="n">dims</span><span class="p">),</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">level_dim_name</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">level</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="c1"># Validate level coordinates</span>
+                <span class="n">level_min</span><span class="p">,</span> <span class="n">level_max</span> <span class="o">=</span> <span class="n">data_var</span><span class="p">[</span><span class="n">level_dim_name</span><span class="p">]</span><span class="o">.</span><span class="n">min</span><span class="p">()</span><span class="o">.</span><span class="n">item</span><span class="p">(),</span> <span class="n">data_var</span><span class="p">[</span><span class="n">level_dim_name</span><span class="p">]</span><span class="o">.</span><span class="n">max</span><span class="p">()</span><span class="o">.</span><span class="n">item</span><span class="p">()</span>
+                
+                <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">level</span><span class="p">,</span> <span class="p">(</span><span class="nb">slice</span><span class="p">,</span> <span class="nb">list</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)):</span>
+                    <span class="c1"># Check if completely outside range</span>
+                    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">level</span><span class="p">,</span> <span class="nb">slice</span><span class="p">):</span>
+                        <span class="k">if</span> <span class="n">level</span><span class="o">.</span><span class="n">start</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">level</span><span class="o">.</span><span class="n">start</span> <span class="o">&gt;</span> <span class="n">level_max</span><span class="p">:</span>
+                            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Requested level minimum </span><span class="si">{</span><span class="n">level</span><span class="o">.</span><span class="n">start</span><span class="si">}</span><span class="s2"> is greater than available maximum </span><span class="si">{</span><span class="n">level_max</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                        <span class="k">if</span> <span class="n">level</span><span class="o">.</span><span class="n">stop</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">level</span><span class="o">.</span><span class="n">stop</span> <span class="o">&lt;</span> <span class="n">level_min</span><span class="p">:</span>
+                            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Requested level maximum </span><span class="si">{</span><span class="n">level</span><span class="o">.</span><span class="n">stop</span><span class="si">}</span><span class="s2"> is less than available minimum </span><span class="si">{</span><span class="n">level_min</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                    <span class="k">elif</span> <span class="nb">min</span><span class="p">(</span><span class="n">level</span><span class="p">)</span> <span class="o">&gt;</span> <span class="n">level_max</span> <span class="ow">or</span> <span class="nb">max</span><span class="p">(</span><span class="n">level</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">level_min</span><span class="p">:</span>
+                        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Requested levels [</span><span class="si">{</span><span class="nb">min</span><span class="p">(</span><span class="n">level</span><span class="p">)</span><span class="si">}</span><span class="s2">, </span><span class="si">{</span><span class="nb">max</span><span class="p">(</span><span class="n">level</span><span class="p">)</span><span class="si">}</span><span class="s2">] are outside available range [</span><span class="si">{</span><span class="n">level_min</span><span class="si">}</span><span class="s2">, </span><span class="si">{</span><span class="n">level_max</span><span class="si">}</span><span class="s2">]&quot;</span><span class="p">)</span>
+                    
+                    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Averaging over levels: </span><span class="si">{</span><span class="n">level</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                    <span class="k">with</span> <span class="n">xr</span><span class="o">.</span><span class="n">set_options</span><span class="p">(</span><span class="n">keep_attrs</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+                        <span class="n">data_var</span> <span class="o">=</span> <span class="n">data_var</span><span class="o">.</span><span class="n">sel</span><span class="p">({</span><span class="n">level_dim_name</span><span class="p">:</span> <span class="n">level</span><span class="p">})</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="n">level_dim_name</span><span class="p">)</span>
+                <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">level</span><span class="p">,</span> <span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">)):</span>
+                    <span class="c1"># For single values with &#39;nearest&#39; method, warn if far outside range</span>
+                    <span class="k">if</span> <span class="n">level</span> <span class="o">&lt;</span> <span class="n">level_min</span> <span class="o">*</span> <span class="mf">0.5</span> <span class="ow">or</span> <span class="n">level</span> <span class="o">&gt;</span> <span class="n">level_max</span> <span class="o">*</span> <span class="mf">1.5</span><span class="p">:</span>
+                        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Warning: Requested level </span><span class="si">{</span><span class="n">level</span><span class="si">}</span><span class="s2"> is far from available range [</span><span class="si">{</span><span class="n">level_min</span><span class="si">}</span><span class="s2">, </span><span class="si">{</span><span class="n">level_max</span><span class="si">}</span><span class="s2">]&quot;</span><span class="p">)</span>
+                    
+                    <span class="n">selection_dict</span><span class="p">[</span><span class="n">level_dim_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">level</span>
+                    <span class="n">needs_nearest</span> <span class="o">=</span> <span class="kc">True</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">selection_dict</span><span class="p">[</span><span class="n">level_dim_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">level</span>
+            <span class="k">elif</span> <span class="nb">len</span><span class="p">(</span><span class="n">data_var</span><span class="p">[</span><span class="n">level_dim_name</span><span class="p">])</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="n">level_val</span> <span class="o">=</span> <span class="n">data_var</span><span class="p">[</span><span class="n">level_dim_name</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+                <span class="n">selection_dict</span><span class="p">[</span><span class="n">level_dim_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">level_val</span>
+                <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Warning: Multiple levels found. Using first level: </span><span class="si">{</span><span class="n">level_val</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">level</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Warning: Level dimension not found. Ignoring &#39;level&#39; parameter.&quot;</span><span class="p">)</span>
+        
+        <span class="c1"># Continue with existing code for selection</span>
+        <span class="k">if</span> <span class="n">selection_dict</span><span class="p">:</span>
+            <span class="n">has_slice</span> <span class="o">=</span> <span class="nb">any</span><span class="p">(</span><span class="nb">isinstance</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="nb">slice</span><span class="p">)</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">selection_dict</span><span class="o">.</span><span class="n">values</span><span class="p">())</span>
+            <span class="n">method_to_use</span> <span class="o">=</span> <span class="s1">&#39;nearest&#39;</span> <span class="k">if</span> <span class="n">needs_nearest</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">has_slice</span> <span class="k">else</span> <span class="kc">None</span>
+
+            <span class="k">if</span> <span class="n">method_to_use</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">needs_nearest</span> <span class="ow">and</span> <span class="n">has_slice</span><span class="p">:</span>
+                <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Warning: Using slice selection for one dimension and nearest neighbor &quot;</span>
+                    <span class="s2">&quot;for another in the same .sel() call is not supported by xarray. &quot;</span>
+                    <span class="s2">&quot;Nearest neighbor selection will be ignored for non-slice dimensions in this step.&quot;</span><span class="p">)</span>
+
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Applying final selection: </span><span class="si">{</span><span class="n">selection_dict</span><span class="si">}</span><span class="s2"> with method=&#39;</span><span class="si">{</span><span class="n">method_to_use</span><span class="si">}</span><span class="s2">&#39;&quot;</span><span class="p">)</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">data_var</span> <span class="o">=</span> <span class="n">data_var</span><span class="o">.</span><span class="n">sel</span><span class="p">(</span><span class="o">**</span><span class="n">selection_dict</span><span class="p">,</span> <span class="n">method</span><span class="o">=</span><span class="n">method_to_use</span><span class="p">)</span>
+            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Error during final .sel() operation: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Selection dictionary: </span><span class="si">{</span><span class="n">selection_dict</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Method used: </span><span class="si">{</span><span class="n">method_to_use</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                <span class="k">raise</span> 
+
+        <span class="k">if</span> <span class="n">data_var</span><span class="o">.</span><span class="n">size</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Warning: Selection resulted in an empty DataArray.&quot;</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">data_var</span>
+
+<div class="viewcode-block" id="TimeSeriesAccessor.plot_time_series">
+<a class="viewcode-back" href="../../../climate_diagnostics.TimeSeries.TimeSeries.html#climate_diagnostics.TimeSeries.TimeSeries.TimeSeriesAccessor.plot_time_series">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">plot_time_series</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> 
+                         <span class="n">latitude</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> 
+                         <span class="n">longitude</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> 
+                         <span class="n">level</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                         <span class="n">time_range</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> 
+                         <span class="n">variable</span><span class="o">=</span><span class="s1">&#39;air&#39;</span><span class="p">,</span> 
+                         <span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">16</span><span class="p">,</span> <span class="mi">10</span><span class="p">),</span>
+                         <span class="n">season</span><span class="o">=</span><span class="s1">&#39;annual&#39;</span><span class="p">,</span> 
+                         <span class="n">year</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> 
+                         <span class="n">area_weighted</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                         <span class="n">save_plot_path</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Plot time series of spatial standard deviation.</span>
+<span class="sd">    </span>
+<span class="sd">        Creates a time series plot showing how the spatial variability (standard deviation)</span>
+<span class="sd">        of the selected variable evolves over time, with optional area-weighting</span>
+<span class="sd">        and seasonal/temporal filtering.</span>
+<span class="sd">        </span>
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        latitude : float, list, slice, or None</span>
+<span class="sd">            Latitude selection criteria for spatial subsetting</span>
+<span class="sd">        longitude : float, list, slice, or None</span>
+<span class="sd">            Longitude selection criteria for spatial subsetting</span>
+<span class="sd">        level : float, int, list, slice, or None</span>
+<span class="sd">            Vertical level selection criteria. Multiple levels will be averaged.</span>
+<span class="sd">        time_range : slice or None</span>
+<span class="sd">            Time range to include in the plot</span>
+<span class="sd">        variable : str, default &#39;air&#39;</span>
+<span class="sd">            Name of the variable to analyze</span>
+<span class="sd">        figsize : tuple, default (16, 10)</span>
+<span class="sd">            Figure size in inches (width, height)</span>
+<span class="sd">        season : str, default &#39;annual&#39;</span>
+<span class="sd">            Season to filter by (&#39;annual&#39;, &#39;jjas&#39;, &#39;djf&#39;, &#39;mam&#39;, &#39;son&#39;)</span>
+<span class="sd">        area_weighted : bool, default True</span>
+<span class="sd">            Whether to use cosine(latitude) weighting for spatial standard deviation</span>
+<span class="sd">        save_plot_path : str, optional</span>
+<span class="sd">            Path where the plot should be saved. If None (default), the plot is not saved.</span>
+<span class="sd">            </span>
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        matplotlib.axes.Axes</span>
+<span class="sd">            The plot&#39;s axes object for further customization</span>
+<span class="sd">            </span>
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If time dimension is not found or if no spatial dimensions exist</span>
+<span class="sd">            </span>
+<span class="sd">        Notes</span>
+<span class="sd">        -----</span>
+<span class="sd">        - Area weighting is applied using cosine of latitude when enabled</span>
+<span class="sd">        - For Dask arrays, computation is performed with a progress bar</span>
+<span class="sd">        - The plot displays appropriate units and metadata from the variable attributes</span>
+<span class="sd">        - Grid lines are added for better readability</span>
+<span class="sd">            </span>
+<span class="sd">        Examples</span>
+<span class="sd">        --------</span>
+<span class="sd">        &gt;&gt;&gt; # Basic time series of temperature over a region</span>
+<span class="sd">        &gt;&gt;&gt; ds.climate_timeseries.plot_time_series(</span>
+<span class="sd">        ...     variable=&#39;air&#39;,</span>
+<span class="sd">        ...     latitude=slice(40, 6),</span>
+<span class="sd">        ...     longitude=slice(60, 100)</span>
+<span class="sd">        ... )</span>
+<span class="sd">        &gt;&gt;&gt; </span>
+<span class="sd">        &gt;&gt;&gt; # Compare winter temperature from specific pressure level</span>
+<span class="sd">        &gt;&gt;&gt; ds.climate_timeseries.plot_time_series(</span>
+<span class="sd">        ...     variable=&#39;air&#39;,</span>
+<span class="sd">        ...     level=500,  # 500 hPa</span>
+<span class="sd">        ...     season=&#39;djf&#39;,</span>
+<span class="sd">        ...     time_range=slice(&#39;2000-01-01&#39;, &#39;2020-12-31&#39;),</span>
+<span class="sd">        ...     save_plot_path=&#39;/home/user/Downloads/winter_temp_500hPa.png&#39;</span>
+<span class="sd">        ... )</span>
+<span class="sd">        &gt;&gt;&gt; </span>
+<span class="sd">        &gt;&gt;&gt; # Time series of precipitation without area weighting</span>
+<span class="sd">        &gt;&gt;&gt; ax = ds.climate_timeseries.plot_time_series(</span>
+<span class="sd">        ...     variable=&#39;prate&#39;,</span>
+<span class="sd">        ...     latitude=slice(40, 6),</span>
+<span class="sd">        ...     longitude=slice(60,110),</span>
+<span class="sd">        ...     area_weighted=False</span>
+<span class="sd">        ... )</span>
+<span class="sd">        &gt;&gt;&gt; # Customize the plot further</span>
+<span class="sd">        &gt;&gt;&gt; ax.set_ylim(0, 10)</span>
+<span class="sd">        &gt;&gt;&gt; ax.set_title(&#39;Tropical Precipitation&#39;)</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="n">data_var</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_select_process_data</span><span class="p">(</span>
+            <span class="n">variable</span><span class="p">,</span> <span class="n">latitude</span><span class="p">,</span> <span class="n">longitude</span><span class="p">,</span> <span class="n">level</span><span class="p">,</span> <span class="n">time_range</span><span class="p">,</span> <span class="n">season</span><span class="p">,</span> <span class="n">year</span>
+        <span class="p">)</span>
+
+        <span class="k">if</span> <span class="s1">&#39;time&#39;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">data_var</span><span class="o">.</span><span class="n">dims</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Time dimension not found in processed data for time series plot.&quot;</span><span class="p">)</span>
+
+        <span class="n">spatial_dims</span> <span class="o">=</span> <span class="p">[</span><span class="n">d</span> <span class="k">for</span> <span class="n">d</span> <span class="ow">in</span> <span class="p">[</span><span class="s1">&#39;lat&#39;</span><span class="p">,</span> <span class="s1">&#39;lon&#39;</span><span class="p">]</span> <span class="k">if</span> <span class="n">d</span> <span class="ow">in</span> <span class="n">data_var</span><span class="o">.</span><span class="n">dims</span><span class="p">]</span>
+        <span class="n">plot_data</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="k">if</span> <span class="n">spatial_dims</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">area_weighted</span> <span class="ow">and</span> <span class="s1">&#39;lat&#39;</span> <span class="ow">in</span> <span class="n">spatial_dims</span><span class="p">:</span>
+                <span class="n">weights</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">deg2rad</span><span class="p">(</span><span class="n">data_var</span><span class="p">[</span><span class="s1">&#39;lat&#39;</span><span class="p">]))</span>
+                <span class="n">weights</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="s2">&quot;weights&quot;</span>
+                <span class="n">plot_data</span> <span class="o">=</span> <span class="n">data_var</span><span class="o">.</span><span class="n">weighted</span><span class="p">(</span><span class="n">weights</span><span class="p">)</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="n">spatial_dims</span><span class="p">)</span>
+                <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Calculating area-weighted spatial mean.&quot;</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">plot_data</span> <span class="o">=</span> <span class="n">data_var</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="n">spatial_dims</span><span class="p">)</span>
+                <span class="n">weight_msg</span> <span class="o">=</span> <span class="s2">&quot;(unweighted)&quot;</span> <span class="k">if</span> <span class="s1">&#39;lat&#39;</span> <span class="ow">in</span> <span class="n">spatial_dims</span> <span class="k">else</span> <span class="s2">&quot;&quot;</span>
+                <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Calculating simple spatial mean </span><span class="si">{</span><span class="n">weight_msg</span><span class="si">}</span><span class="s2">.&quot;</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">plot_data</span> <span class="o">=</span> <span class="n">data_var</span>
+            <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Plotting time series for single point (no spatial average).&quot;</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">plot_data</span><span class="p">,</span> <span class="s1">&#39;compute&#39;</span><span class="p">):</span>
+            <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Computing time series...&quot;</span><span class="p">)</span>
+            <span class="k">with</span> <span class="n">ProgressBar</span><span class="p">():</span>
+                <span class="n">plot_data</span> <span class="o">=</span> <span class="n">plot_data</span><span class="o">.</span><span class="n">compute</span><span class="p">()</span>
+
+        <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="n">figsize</span><span class="p">)</span>
+        <span class="n">plot_data</span><span class="o">.</span><span class="n">plot</span><span class="p">()</span>
+
+        <span class="n">ax</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">gca</span><span class="p">()</span>
+        <span class="n">units</span> <span class="o">=</span> <span class="n">data_var</span><span class="o">.</span><span class="n">attrs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;units&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
+        <span class="n">long_name</span> <span class="o">=</span> <span class="n">data_var</span><span class="o">.</span><span class="n">attrs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;long_name&quot;</span><span class="p">,</span> <span class="n">variable</span><span class="p">)</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">long_name</span><span class="si">}</span><span class="s2"> (</span><span class="si">{</span><span class="n">units</span><span class="si">}</span><span class="s2">)&quot;</span><span class="p">)</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s1">&#39;Time&#39;</span><span class="p">)</span>
+
+        <span class="n">season_display</span> <span class="o">=</span> <span class="n">season</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span> <span class="k">if</span> <span class="n">season</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="o">!=</span> <span class="s1">&#39;annual&#39;</span> <span class="k">else</span> <span class="s1">&#39;Annual&#39;</span>
+        <span class="n">year_display</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;for </span><span class="si">{</span><span class="n">year</span><span class="si">}</span><span class="s2">&quot;</span> <span class="k">if</span> <span class="n">year</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="s2">&quot;&quot;</span>
+        <span class="n">weight_display</span> <span class="o">=</span> <span class="s2">&quot;Area-Weighted &quot;</span> <span class="k">if</span> <span class="n">area_weighted</span> <span class="ow">and</span> <span class="s1">&#39;lat&#39;</span> <span class="ow">in</span> <span class="n">spatial_dims</span> <span class="k">else</span> <span class="s2">&quot;&quot;</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">season_display</span><span class="si">}</span><span class="s1"> </span><span class="si">{</span><span class="n">weight_display</span><span class="si">}</span><span class="s1">Spatial Mean Time Series </span><span class="si">{</span><span class="n">year_display</span><span class="si">}</span><span class="se">\n</span><span class="s1">Variable: </span><span class="si">{</span><span class="n">variable</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
+
+        <span class="n">ax</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;--&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.7</span><span class="p">)</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">tight_layout</span><span class="p">()</span>
+        <span class="c1"># Save plot if path is provided</span>
+        <span class="k">if</span> <span class="n">save_plot_path</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">plt</span><span class="o">.</span><span class="n">savefig</span><span class="p">(</span><span class="n">save_plot_path</span><span class="p">,</span> <span class="n">bbox_inches</span><span class="o">=</span><span class="s1">&#39;tight&#39;</span><span class="p">,</span> <span class="n">dpi</span><span class="o">=</span><span class="mi">300</span><span class="p">)</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Plot saved to: </span><span class="si">{</span><span class="n">save_plot_path</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        
+        <span class="k">return</span> <span class="n">ax</span></div>
+
+
+
+<div class="viewcode-block" id="TimeSeriesAccessor.plot_std_space">
+<a class="viewcode-back" href="../../../climate_diagnostics.TimeSeries.TimeSeries.html#climate_diagnostics.TimeSeries.TimeSeries.TimeSeriesAccessor.plot_std_space">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">plot_std_space</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> 
+                       <span class="n">latitude</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> 
+                       <span class="n">longitude</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> 
+                       <span class="n">level</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                       <span class="n">time_range</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> 
+                       <span class="n">variable</span><span class="o">=</span><span class="s1">&#39;air&#39;</span><span class="p">,</span> 
+                       <span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">16</span><span class="p">,</span> <span class="mi">10</span><span class="p">),</span>
+                       <span class="n">season</span><span class="o">=</span><span class="s1">&#39;annual&#39;</span><span class="p">,</span> 
+                       <span class="n">area_weighted</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                       <span class="n">save_plot_path</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Plot time series of spatial standard deviation.</span>
+<span class="sd">    </span>
+<span class="sd">        Creates a time series plot showing how the spatial variability (standard deviation)</span>
+<span class="sd">        of the selected variable evolves over time, with optional area-weighting</span>
+<span class="sd">        and seasonal/temporal filtering.</span>
+<span class="sd">        </span>
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        latitude : float, list, slice, or None</span>
+<span class="sd">            Latitude selection criteria for spatial subsetting</span>
+<span class="sd">        longitude : float, list, slice, or None</span>
+<span class="sd">            Longitude selection criteria for spatial subsetting</span>
+<span class="sd">        level : float, int, list, slice, or None</span>
+<span class="sd">            Vertical level selection criteria. Multiple levels will be averaged.</span>
+<span class="sd">        time_range : slice or None</span>
+<span class="sd">            Time range to include in the plot</span>
+<span class="sd">        variable : str, default &#39;air&#39;</span>
+<span class="sd">            Name of the variable to analyze</span>
+<span class="sd">        figsize : tuple, default (16, 10)</span>
+<span class="sd">            Figure size in inches (width, height)</span>
+<span class="sd">        season : str, default &#39;annual&#39;</span>
+<span class="sd">            Season to filter by (&#39;annual&#39;, &#39;jjas&#39;, &#39;djf&#39;, &#39;mam&#39;, &#39;son&#39;)</span>
+<span class="sd">        area_weighted : bool, default True</span>
+<span class="sd">            Whether to use cosine(latitude) weighting for spatial standard deviation</span>
+<span class="sd">        save_plot_path : str, optional</span>
+<span class="sd">            Path where the plot should be saved. If None (default), the plot is not saved.</span>
+<span class="sd">            </span>
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        matplotlib.axes.Axes</span>
+<span class="sd">            The plot&#39;s axes object for further customization</span>
+<span class="sd">            </span>
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If time dimension is not found or if no spatial dimensions exist</span>
+<span class="sd">        Notes</span>
+<span class="sd">        -----</span>
+<span class="sd">        - This method is particularly useful for analyzing the variability across regions</span>
+<span class="sd">        - Higher standard deviation values indicate greater spatial heterogeneity</span>
+<span class="sd">        - Area weighting accounts for the decreasing grid cell size toward the poles</span>
+<span class="sd">        - The computation uses Dask&#39;s progress bar</span>
+<span class="sd">        </span>
+<span class="sd">        Examples</span>
+<span class="sd">        --------</span>
+<span class="sd">        &gt;&gt;&gt; # Basic spatial variability of temperature over time</span>
+<span class="sd">        &gt;&gt;&gt; ds.climate_timeseries.plot_std_space(</span>
+<span class="sd">        ...     variable=&#39;air&#39;,</span>
+<span class="sd">        ...     longitude = slice(40,6)</span>
+<span class="sd">        ...     latitude=slice(60,110), </span>
+<span class="sd">        ...     area_weighted=True</span>
+<span class="sd">        ... )</span>
+<span class="sd">        &gt;&gt;&gt; </span>
+<span class="sd">        &gt;&gt;&gt; # Regional monsoon precipitation variability</span>
+<span class="sd">        &gt;&gt;&gt; ax = ds.climate_timeseries.plot_std_space(</span>
+<span class="sd">        ...     variable=&#39;prate&#39;,</span>
+<span class="sd">        ...     latitude=slice(40, 6),</span>
+<span class="sd">        ...     longitude=slice(60, 110),</span>
+<span class="sd">        ...     season=&#39;jjas&#39;,  # Summer monsoon</span>
+<span class="sd">        ...     time_range=slice(&#39;1980-01-01&#39;, &#39;2020-12-31&#39;)</span>
+<span class="sd">        ... )</span>
+<span class="sd">        &gt;&gt;&gt; </span>
+<span class="sd">        &gt;&gt;&gt; # spatial variability at different atmospheric levels</span>
+<span class="sd">        &gt;&gt;&gt; ds.climate_timeseries.plot_std_space(</span>
+<span class="sd">        ...     variable=&#39;geopotential_height&#39;,</span>
+<span class="sd">        ...     level=850,</span>
+<span class="sd">        ... )</span>
+<span class="sd">        &gt;&gt;&gt; ds.climate_timeseries.plot_std_space(</span>
+<span class="sd">        ...     variable=&#39;geopotential_height&#39;,</span>
+<span class="sd">        ...     level=500,</span>
+<span class="sd">        ... )</span>
+<span class="sd">        </span>
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="n">data_var</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_select_process_data</span><span class="p">(</span>
+             <span class="n">variable</span><span class="p">,</span> <span class="n">latitude</span><span class="p">,</span> <span class="n">longitude</span><span class="p">,</span> <span class="n">level</span><span class="p">,</span> <span class="n">time_range</span><span class="p">,</span> <span class="n">season</span>
+        <span class="p">)</span>
+
+        <span class="k">if</span> <span class="s1">&#39;time&#39;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">data_var</span><span class="o">.</span><span class="n">dims</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Time dimension not found for spatial standard deviation plot.&quot;</span><span class="p">)</span>
+
+        <span class="n">spatial_dims</span> <span class="o">=</span> <span class="p">[</span><span class="n">d</span> <span class="k">for</span> <span class="n">d</span> <span class="ow">in</span> <span class="p">[</span><span class="s1">&#39;lat&#39;</span><span class="p">,</span> <span class="s1">&#39;lon&#39;</span><span class="p">]</span> <span class="k">if</span> <span class="n">d</span> <span class="ow">in</span> <span class="n">data_var</span><span class="o">.</span><span class="n">dims</span><span class="p">]</span>
+        <span class="n">plot_data</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">spatial_dims</span><span class="p">:</span>
+             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;No spatial dimensions (&#39;lat&#39;, &#39;lon&#39;) found for calculating spatial standard deviation.&quot;</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">area_weighted</span> <span class="ow">and</span> <span class="s1">&#39;lat&#39;</span> <span class="ow">in</span> <span class="n">spatial_dims</span><span class="p">:</span>
+            <span class="n">weights</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">deg2rad</span><span class="p">(</span><span class="n">data_var</span><span class="p">[</span><span class="s1">&#39;lat&#39;</span><span class="p">]))</span>
+            <span class="n">weights</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="s2">&quot;weights&quot;</span>
+            <span class="n">plot_data</span> <span class="o">=</span> <span class="n">data_var</span><span class="o">.</span><span class="n">weighted</span><span class="p">(</span><span class="n">weights</span><span class="p">)</span><span class="o">.</span><span class="n">std</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="n">spatial_dims</span><span class="p">)</span>
+            <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Calculating area-weighted spatial standard deviation.&quot;</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">plot_data</span> <span class="o">=</span> <span class="n">data_var</span><span class="o">.</span><span class="n">std</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="n">spatial_dims</span><span class="p">)</span>
+            <span class="n">weight_msg</span> <span class="o">=</span> <span class="s2">&quot;(unweighted)&quot;</span> <span class="k">if</span> <span class="s1">&#39;lat&#39;</span> <span class="ow">in</span> <span class="n">spatial_dims</span> <span class="k">else</span> <span class="s2">&quot;&quot;</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Calculating simple spatial standard deviation </span><span class="si">{</span><span class="n">weight_msg</span><span class="si">}</span><span class="s2">.&quot;</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">plot_data</span><span class="p">,</span> <span class="s1">&#39;compute&#39;</span><span class="p">):</span>
+            <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Computing spatial standard deviation time series...&quot;</span><span class="p">)</span>
+            <span class="k">with</span> <span class="n">ProgressBar</span><span class="p">():</span>
+                <span class="n">plot_data</span> <span class="o">=</span> <span class="n">plot_data</span><span class="o">.</span><span class="n">compute</span><span class="p">()</span>
+
+        <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="n">figsize</span><span class="p">)</span>
+        <span class="n">plot_data</span><span class="o">.</span><span class="n">plot</span><span class="p">()</span>
+
+        <span class="n">ax</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">gca</span><span class="p">()</span>
+        <span class="n">units</span> <span class="o">=</span> <span class="n">data_var</span><span class="o">.</span><span class="n">attrs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;units&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
+        <span class="n">long_name</span> <span class="o">=</span> <span class="n">data_var</span><span class="o">.</span><span class="n">attrs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;long_name&quot;</span><span class="p">,</span> <span class="n">variable</span><span class="p">)</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Spatial Std. Dev. (</span><span class="si">{</span><span class="n">units</span><span class="si">}</span><span class="s2">)&quot;</span><span class="p">)</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s1">&#39;Time&#39;</span><span class="p">)</span>
+
+        <span class="n">season_display</span> <span class="o">=</span> <span class="n">season</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span> <span class="k">if</span> <span class="n">season</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="o">!=</span> <span class="s1">&#39;annual&#39;</span> <span class="k">else</span> <span class="s1">&#39;Annual&#39;</span>
+        <span class="n">weight_display</span> <span class="o">=</span> <span class="s2">&quot;Area-Weighted &quot;</span> <span class="k">if</span> <span class="n">area_weighted</span> <span class="ow">and</span> <span class="s1">&#39;lat&#39;</span> <span class="ow">in</span> <span class="n">spatial_dims</span> <span class="k">else</span> <span class="s2">&quot;&quot;</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">season_display</span><span class="si">}</span><span class="s1"> Time Series of </span><span class="si">{</span><span class="n">weight_display</span><span class="si">}</span><span class="s1">Spatial Standard Deviation</span><span class="se">\n</span><span class="s1">Variable: </span><span class="si">{</span><span class="n">variable</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
+
+        <span class="n">ax</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;--&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.7</span><span class="p">)</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">tight_layout</span><span class="p">()</span>
+        <span class="c1"># Save plot if path is provided</span>
+        <span class="k">if</span> <span class="n">save_plot_path</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">plt</span><span class="o">.</span><span class="n">savefig</span><span class="p">(</span><span class="n">save_plot_path</span><span class="p">,</span> <span class="n">bbox_inches</span><span class="o">=</span><span class="s1">&#39;tight&#39;</span><span class="p">,</span> <span class="n">dpi</span><span class="o">=</span><span class="mi">300</span><span class="p">)</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Plot saved to: </span><span class="si">{</span><span class="n">save_plot_path</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">ax</span></div>
+
+
+
+<div class="viewcode-block" id="TimeSeriesAccessor.decompose_time_series">
+<a class="viewcode-back" href="../../../climate_diagnostics.TimeSeries.TimeSeries.html#climate_diagnostics.TimeSeries.TimeSeries.TimeSeriesAccessor.decompose_time_series">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">decompose_time_series</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">variable</span><span class="o">=</span><span class="s1">&#39;air&#39;</span><span class="p">,</span>
+        <span class="n">level</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">latitude</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">longitude</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">time_range</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">season</span><span class="o">=</span><span class="s1">&#39;annual&#39;</span><span class="p">,</span>
+        <span class="n">stl_seasonal</span><span class="o">=</span><span class="mi">13</span><span class="p">,</span>
+        <span class="n">stl_period</span><span class="o">=</span><span class="mi">12</span><span class="p">,</span>
+        <span class="n">area_weighted</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="n">plot_results</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">16</span><span class="p">,</span> <span class="mi">10</span><span class="p">),</span>
+        <span class="n">save_plot_path</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Decompose a time series into trend, seasonal, and residual components.</span>
+<span class="sd">        </span>
+<span class="sd">        Applies the Seasonal-Trend decomposition using LOESS (STL) to the spatially </span>
+<span class="sd">        averaged time series. The decomposition separates the time series into:</span>
+<span class="sd">        - Trend component (long-term change)</span>
+<span class="sd">        - Seasonal component (recurring patterns)</span>
+<span class="sd">        - Residual component (remaining variation)</span>
+<span class="sd">        </span>
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        variable : str, default &#39;air&#39;</span>
+<span class="sd">            Name of the variable to decompose</span>
+<span class="sd">        level : float, int, list, slice, or None</span>
+<span class="sd">            Vertical level selection criteria. Multiple levels will be averaged.</span>
+<span class="sd">        latitude : float, list, slice, or None</span>
+<span class="sd">            Latitude selection criteria for spatial subsetting</span>
+<span class="sd">        longitude : float, list, slice, or None</span>
+<span class="sd">            Longitude selection criteria for spatial subsetting</span>
+<span class="sd">        time_range : slice or None</span>
+<span class="sd">            Time range to include in the decomposition</span>
+<span class="sd">        season : str, default &#39;annual&#39;</span>
+<span class="sd">            Season to filter by (&#39;annual&#39;, &#39;jjas&#39;, &#39;djf&#39;, &#39;mam&#39;, &#39;son&#39;)</span>
+<span class="sd">        stl_seasonal : int, default 13</span>
+<span class="sd">            STL decomposition parameter: Length of the seasonal smoother.</span>
+<span class="sd">            Must be odd; if even, will be incremented by 1.</span>
+<span class="sd">        stl_period : int, default 12</span>
+<span class="sd">            STL decomposition parameter: Period of the seasonal component </span>
+<span class="sd">            (e.g., 12 for monthly data, 4 for quarterly data)</span>
+<span class="sd">        area_weighted : bool, default True</span>
+<span class="sd">            Whether to use cosine(latitude) weighting for spatial averaging</span>
+<span class="sd">        plot_results : bool, default True</span>
+<span class="sd">            Whether to create and display decomposition plots</span>
+<span class="sd">        figsize : tuple, default (16, 10)</span>
+<span class="sd">            Figure size in inches (width, height) when plotting</span>
+<span class="sd">        save_plot_path : str, optional</span>
+<span class="sd">            Path where the plot should be saved if plot_results is True. </span>
+<span class="sd">            If None (default), the plot is not saved.</span>
+<span class="sd">            </span>
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        dict or tuple</span>
+<span class="sd">            If plot_results is False, returns a dictionary with the decomposition components</span>
+<span class="sd">            (original, trend, seasonal, residual).</span>
+<span class="sd">            If plot_results is True, returns a tuple (dictionary, figure) with both the</span>
+<span class="sd">            decomposition components and the matplotlib figure object.</span>
+<span class="sd">            </span>
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If the time series is too short for decomposition or contains invalid values</span>
+<span class="sd">            </span>
+<span class="sd">        Notes</span>
+<span class="sd">        -----</span>
+<span class="sd">        - The STL decomposition requires at least 2*period+1 data points</span>
+<span class="sd">        - For monthly data (period=12), this means at least 25 time points</span>
+<span class="sd">        - The stl_seasonal parameter controls smoothness of the seasonal component</span>
+<span class="sd">        - Higher stl_seasonal values result in smoother seasonal components</span>
+<span class="sd">        - Time series is first spatially averaged (area-weighted) before decomposition</span>
+<span class="sd">        - The trend component can be used to analyze long-term climate change signals</span>
+<span class="sd">        - The seasonal component reveals recurring annual patterns</span>
+<span class="sd">        - The residual component can highlight anomalous events</span>
+<span class="sd">        </span>
+<span class="sd">        Examples</span>
+<span class="sd">        ---------</span>
+<span class="sd">         </span>
+<span class="sd">        &gt;&gt;&gt; # Analyze regional precipitation trends without plotting</span>
+<span class="sd">        &gt;&gt;&gt; precip_components = ds.climate_timeseries.decompose_time_series(</span>
+<span class="sd">        ...     variable=&#39;prate&#39;,</span>
+<span class="sd">        ...     latitude=slice(40, 6),</span>
+<span class="sd">        ...     longitude=slice(60, 100),</span>
+<span class="sd">        ...     plot_results=False,</span>
+<span class="sd">        ...     stl_seasonal=13,  # Smoother seasonal component</span>
+<span class="sd">        ...     stl_period=12</span>
+<span class="sd">        ... )</span>
+<span class="sd">        </span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+        <span class="n">data_var</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_select_process_data</span><span class="p">(</span>
+             <span class="n">variable</span><span class="p">,</span> <span class="n">latitude</span><span class="p">,</span> <span class="n">longitude</span><span class="p">,</span> <span class="n">level</span><span class="p">,</span> <span class="n">time_range</span><span class="p">,</span> <span class="n">season</span>
+        <span class="p">)</span>
+
+        <span class="k">if</span> <span class="s1">&#39;time&#39;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">data_var</span><span class="o">.</span><span class="n">dims</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Time dimension required for decomposition.&quot;</span><span class="p">)</span>
+
+        <span class="n">units</span> <span class="o">=</span> <span class="n">data_var</span><span class="o">.</span><span class="n">attrs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;units&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
+        <span class="n">long_name</span> <span class="o">=</span> <span class="n">data_var</span><span class="o">.</span><span class="n">attrs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;long_name&quot;</span><span class="p">,</span> <span class="n">variable</span><span class="p">)</span>
+
+        <span class="n">spatial_dims</span> <span class="o">=</span> <span class="p">[</span><span class="n">d</span> <span class="k">for</span> <span class="n">d</span> <span class="ow">in</span> <span class="p">[</span><span class="s1">&#39;lat&#39;</span><span class="p">,</span> <span class="s1">&#39;lon&#39;</span><span class="p">]</span> <span class="k">if</span> <span class="n">d</span> <span class="ow">in</span> <span class="n">data_var</span><span class="o">.</span><span class="n">dims</span><span class="p">]</span>
+        <span class="n">ts_mean</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="k">if</span> <span class="n">spatial_dims</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">area_weighted</span> <span class="ow">and</span> <span class="s1">&#39;lat&#39;</span> <span class="ow">in</span> <span class="n">spatial_dims</span><span class="p">:</span>
+                <span class="n">weights</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">deg2rad</span><span class="p">(</span><span class="n">data_var</span><span class="p">[</span><span class="s1">&#39;lat&#39;</span><span class="p">]))</span>
+                <span class="n">weights</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="s2">&quot;weights&quot;</span>
+                <span class="n">ts_mean</span> <span class="o">=</span> <span class="n">data_var</span><span class="o">.</span><span class="n">weighted</span><span class="p">(</span><span class="n">weights</span><span class="p">)</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="n">spatial_dims</span><span class="p">)</span>
+                <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Calculating area-weighted spatial mean for decomposition.&quot;</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">ts_mean</span> <span class="o">=</span> <span class="n">data_var</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="n">spatial_dims</span><span class="p">)</span>
+                <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Calculating simple spatial mean for decomposition.&quot;</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">ts_mean</span> <span class="o">=</span> <span class="n">data_var</span>
+            <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Decomposing time series for single point.&quot;</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">ts_mean</span><span class="p">,</span> <span class="s1">&#39;compute&#39;</span><span class="p">):</span>
+            <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Computing mean time series for decomposition...&quot;</span><span class="p">)</span>
+            <span class="k">with</span> <span class="n">ProgressBar</span><span class="p">():</span>
+                <span class="n">ts_mean</span> <span class="o">=</span> <span class="n">ts_mean</span><span class="o">.</span><span class="n">compute</span><span class="p">()</span>
+
+        <span class="n">ts_pd</span> <span class="o">=</span> <span class="n">ts_mean</span><span class="o">.</span><span class="n">to_pandas</span><span class="p">()</span><span class="o">.</span><span class="n">dropna</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">ts_pd</span><span class="o">.</span><span class="n">empty</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Time series is empty or all NaN after processing and spatial averaging.&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">ts_pd</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">stl_period</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Time series length (</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">ts_pd</span><span class="p">)</span><span class="si">}</span><span class="s2">) is too short for the specified STL period (</span><span class="si">{</span><span class="n">stl_period</span><span class="si">}</span><span class="s2">). Needs &gt; 2*period.&quot;</span><span class="p">)</span>
+
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Performing STL decomposition (period=</span><span class="si">{</span><span class="n">stl_period</span><span class="si">}</span><span class="s2">, seasonal_smooth=</span><span class="si">{</span><span class="n">stl_seasonal</span><span class="si">}</span><span class="s2">)...&quot;</span><span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">stl_seasonal</span> <span class="o">%</span> <span class="mi">2</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                 <span class="n">stl_seasonal</span> <span class="o">+=</span> <span class="mi">1</span>
+                 <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Adjusted stl_seasonal to be odd: </span><span class="si">{</span><span class="n">stl_seasonal</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="n">stl_result</span> <span class="o">=</span> <span class="n">STL</span><span class="p">(</span><span class="n">ts_pd</span><span class="p">,</span> <span class="n">seasonal</span><span class="o">=</span><span class="n">stl_seasonal</span><span class="p">,</span> <span class="n">period</span><span class="o">=</span><span class="n">stl_period</span><span class="p">)</span><span class="o">.</span><span class="n">fit</span><span class="p">()</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+             <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;STL decomposition failed: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+             <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Check time series length, NaNs, and stl_period.&quot;</span><span class="p">)</span>
+             <span class="k">raise</span>
+
+        <span class="n">results</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s1">&#39;original&#39;</span><span class="p">:</span> <span class="n">stl_result</span><span class="o">.</span><span class="n">observed</span><span class="p">,</span>
+            <span class="s1">&#39;trend&#39;</span><span class="p">:</span> <span class="n">stl_result</span><span class="o">.</span><span class="n">trend</span><span class="p">,</span>
+            <span class="s1">&#39;seasonal&#39;</span><span class="p">:</span> <span class="n">stl_result</span><span class="o">.</span><span class="n">seasonal</span><span class="p">,</span>
+            <span class="s1">&#39;residual&#39;</span><span class="p">:</span> <span class="n">stl_result</span><span class="o">.</span><span class="n">resid</span>
+        <span class="p">}</span>
+
+        <span class="k">if</span> <span class="n">plot_results</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Plotting decomposition results...&quot;</span><span class="p">)</span>
+            <span class="n">fig</span><span class="p">,</span> <span class="n">axes</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">figsize</span><span class="o">=</span><span class="n">figsize</span><span class="p">,</span> <span class="n">sharex</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+            <span class="n">axes</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">results</span><span class="p">[</span><span class="s1">&#39;original&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">index</span><span class="p">,</span> <span class="n">results</span><span class="p">[</span><span class="s1">&#39;original&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;Observed&#39;</span><span class="p">)</span>
+            <span class="n">axes</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Observed (</span><span class="si">{</span><span class="n">units</span><span class="si">}</span><span class="s2">)&quot;</span><span class="p">)</span>
+            <span class="n">title_prefix</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">season</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="n">season</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="s2">&quot;annual&quot;</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="s2">&quot;Annual&quot;</span><span class="si">}</span><span class="s1">&#39;</span>
+            <span class="n">level_info</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot; at </span><span class="si">{</span><span class="n">level</span><span class="si">}</span><span class="s2">&quot;</span> <span class="k">if</span> <span class="n">level</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="s2">&quot;&quot;</span>
+            <span class="n">axes</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">title_prefix</span><span class="si">}</span><span class="s1"> Time Series Decomposition: </span><span class="si">{</span><span class="n">long_name</span><span class="si">}{</span><span class="n">level_info</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
+
+            <span class="n">axes</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">results</span><span class="p">[</span><span class="s1">&#39;trend&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">index</span><span class="p">,</span> <span class="n">results</span><span class="p">[</span><span class="s1">&#39;trend&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;Trend&#39;</span><span class="p">)</span>
+            <span class="n">axes</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Trend (</span><span class="si">{</span><span class="n">units</span><span class="si">}</span><span class="s2">)&quot;</span><span class="p">)</span>
+
+            <span class="n">axes</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">results</span><span class="p">[</span><span class="s1">&#39;seasonal&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">index</span><span class="p">,</span> <span class="n">results</span><span class="p">[</span><span class="s1">&#39;seasonal&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;Seasonal&#39;</span><span class="p">)</span>
+            <span class="n">axes</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Seasonal (</span><span class="si">{</span><span class="n">units</span><span class="si">}</span><span class="s2">)&quot;</span><span class="p">)</span>
+
+            <span class="n">axes</span><span class="p">[</span><span class="mi">3</span><span class="p">]</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">results</span><span class="p">[</span><span class="s1">&#39;residual&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">index</span><span class="p">,</span> <span class="n">results</span><span class="p">[</span><span class="s1">&#39;residual&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;Residual&#39;</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;-&#39;</span><span class="p">,</span> <span class="n">marker</span><span class="o">=</span><span class="s1">&#39;.&#39;</span><span class="p">,</span> <span class="n">markersize</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.7</span><span class="p">)</span>
+            <span class="n">axes</span><span class="p">[</span><span class="mi">3</span><span class="p">]</span><span class="o">.</span><span class="n">axhline</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;grey&#39;</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;--&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.5</span><span class="p">)</span>
+            <span class="n">axes</span><span class="p">[</span><span class="mi">3</span><span class="p">]</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Residual (</span><span class="si">{</span><span class="n">units</span><span class="si">}</span><span class="s2">)&quot;</span><span class="p">)</span>
+            <span class="n">axes</span><span class="p">[</span><span class="mi">3</span><span class="p">]</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s2">&quot;Time&quot;</span><span class="p">)</span>
+
+            <span class="k">for</span> <span class="n">ax</span> <span class="ow">in</span> <span class="n">axes</span><span class="p">:</span>
+                <span class="n">ax</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;--&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.6</span><span class="p">)</span>
+                <span class="n">ax</span><span class="o">.</span><span class="n">legend</span><span class="p">(</span><span class="n">loc</span><span class="o">=</span><span class="s1">&#39;upper left&#39;</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="s1">&#39;small&#39;</span><span class="p">)</span>
+
+            <span class="n">plt</span><span class="o">.</span><span class="n">tight_layout</span><span class="p">(</span><span class="n">rect</span><span class="o">=</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mf">0.03</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mf">0.97</span><span class="p">])</span>
+            <span class="c1"># Save plot if path is provided</span>
+            <span class="k">if</span> <span class="n">save_plot_path</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">plt</span><span class="o">.</span><span class="n">savefig</span><span class="p">(</span><span class="n">save_plot_path</span><span class="p">,</span> <span class="n">bbox_inches</span><span class="o">=</span><span class="s1">&#39;tight&#39;</span><span class="p">,</span> <span class="n">dpi</span><span class="o">=</span><span class="mi">300</span><span class="p">)</span>
+                <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Plot saved to: </span><span class="si">{</span><span class="n">save_plot_path</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">results</span><span class="p">,</span> <span class="n">fig</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">results</span></div>
+</div>
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;TimeSeriesAccessor&#39;</span><span class="p">]</span>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Pranay Chakraborty, Adil Muhammed I. K..</p>
+  </div>
+
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

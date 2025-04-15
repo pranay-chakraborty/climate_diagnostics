@@ -6,14 +6,14 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>climate_diagnostics.plots.plot module &mdash; Climate Diagnostics Toolkit 0.1.0 documentation</title>
+  <title>climate_diagnostics.plots.plot module &mdash; Climate Diagnostics Toolkit 0.2.1 documentation</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=e59714d7" />
 
   
       <script src="_static/jquery.js?v=5d32c60e"></script>
       <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="_static/documentation_options.js?v=01f34227"></script>
+      <script src="_static/documentation_options.js?v=37f418d5"></script>
       <script src="_static/doctools.js?v=9bcbadda"></script>
       <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="_static/js/theme.js"></script>
@@ -84,8 +84,200 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
              
-  <section id="climate-diagnostics-plots-plot-module">
-<h1>climate_diagnostics.plots.plot module<a class="headerlink" href="#climate-diagnostics-plots-plot-module" title="Link to this heading"></a></h1>
+  <section id="module-climate_diagnostics.plots.plot">
+<span id="climate-diagnostics-plots-plot-module"></span><h1>climate_diagnostics.plots.plot module<a class="headerlink" href="#module-climate_diagnostics.plots.plot" title="Link to this heading"></a></h1>
+<dl class="py class">
+<dt class="sig sig-object py" id="climate_diagnostics.plots.plot.PlotsAccessor">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">climate_diagnostics.plots.plot.</span></span><span class="sig-name descname"><span class="pre">PlotsAccessor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">xarray_obj</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/climate_diagnostics/plots/plot.html#PlotsAccessor"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#climate_diagnostics.plots.plot.PlotsAccessor" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
+<p>Geographical visualizations of climate data using contour plots.</p>
+<p>This accessor provides methods for visualizing climate data with support for:
+- Seasonal filtering (annual, DJF, MAM, JJA, JJAS, SON)
+- Spatial mean calculations
+- Temporal standard deviation calculations
+- Gaussian smoothing for cleaner visualizations
+- Level selection and averaging
+- Land-only visualization options</p>
+<p>Access via the .climate_plots attribute on xarray Datasets.
+.. rubric:: Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">xarray</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">xr</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Open a climate dataset with lat, lon, time dimensions</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">ds</span> <span class="o">=</span> <span class="n">xr</span><span class="o">.</span><span class="n">open_dataset</span><span class="p">(</span><span class="s1">&#39;climate_data.nc&#39;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Create a basic plot using the accessor</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">ds</span><span class="o">.</span><span class="n">climate_plots</span><span class="o">.</span><span class="n">plot_mean</span><span class="p">(</span><span class="n">variable</span><span class="o">=</span><span class="s1">&#39;air&#39;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Filter for winter season and specific region</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">ds</span><span class="o">.</span><span class="n">climate_plots</span><span class="o">.</span><span class="n">plot_mean</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">variable</span><span class="o">=</span><span class="s1">&#39;air&#39;</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">season</span><span class="o">=</span><span class="s1">&#39;djf&#39;</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">latitude</span><span class="o">=</span><span class="nb">slice</span><span class="p">(</span><span class="mi">40</span><span class="p">,</span> <span class="mi">6</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="n">longitude</span><span class="o">=</span><span class="nb">slice</span><span class="p">(</span><span class="mi">65</span><span class="p">,</span><span class="mi">110</span><span class="p">)</span>
+<span class="gp">... </span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Initialize the climate plots accessor.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>xarray_obj</strong> (<a class="reference external" href="https://docs.xarray.dev/en/stable/generated/xarray.Dataset.html#xarray.Dataset" title="(in xarray v2025.3.2.dev0)"><em>xarray.Dataset</em></a>) – The xarray Dataset containing climate data variables with spatial
+coordinates (latitude/longitude) and optionally time and level dimensions.</p>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="climate_diagnostics.plots.plot.PlotsAccessor.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">xarray_obj</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/climate_diagnostics/plots/plot.html#PlotsAccessor.__init__"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#climate_diagnostics.plots.plot.PlotsAccessor.__init__" title="Link to this definition"></a></dt>
+<dd><p>Initialize the climate plots accessor.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>xarray_obj</strong> (<a class="reference external" href="https://docs.xarray.dev/en/stable/generated/xarray.Dataset.html#xarray.Dataset" title="(in xarray v2025.3.2.dev0)"><em>xarray.Dataset</em></a>) – The xarray Dataset containing climate data variables with spatial
+coordinates (latitude/longitude) and optionally time and level dimensions.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="climate_diagnostics.plots.plot.PlotsAccessor.plot_mean">
+<span class="sig-name descname"><span class="pre">plot_mean</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">variable</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'air'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">latitude</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">longitude</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">level</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time_range</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">season</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'annual'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">gaussian_sigma</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">figsize</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">(16,</span> <span class="pre">10)</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cmap</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'coolwarm'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">land_only</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">levels</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">30</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">save_plot_path</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lat_name</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lon_name</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">level_name</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time_name</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'time'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/climate_diagnostics/plots/plot.html#PlotsAccessor.plot_mean"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#climate_diagnostics.plots.plot.PlotsAccessor.plot_mean" title="Link to this definition"></a></dt>
+<dd><p>Plot spatial mean of a climate variable with optional filtering and smoothing.</p>
+<p>Creates a filled contour plot showing the temporal mean of the selected variable,
+with support for seasonal filtering, level selection, and spatial smoothing.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>variable</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>default 'air'</em>) – Name of the climate variable to plot from the dataset.</p></li>
+<li><p><strong>latitude</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#slice" title="(in Python v3.13)"><em>slice</em></a><em>, </em><em>array-like</em><em>, or </em><em>scalar</em><em>, </em><em>optional</em>) – Latitude range or points to select.</p></li>
+<li><p><strong>longitude</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#slice" title="(in Python v3.13)"><em>slice</em></a><em>, </em><em>array-like</em><em>, or </em><em>scalar</em><em>, </em><em>optional</em>) – Longitude range or points to select.</p></li>
+<li><p><strong>level</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/library/functions.html#slice" title="(in Python v3.13)"><em>slice</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.13)"><em>list</em></a><em>, or </em><em>array-like</em><em>, </em><em>optional</em>) – Vertical level(s) to select. If a single value, the nearest level is used.
+If multiple values, they’re averaged.</p></li>
+<li><p><strong>time_range</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#slice" title="(in Python v3.13)"><em>slice</em></a><em> or </em><em>array-like</em><em>, </em><em>optional</em>) – Time range to select for temporal averaging.</p></li>
+<li><p><strong>season</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>default 'annual'</em>) – Season to filter by: ‘annual’, ‘djf’, ‘mam’, ‘jja’, ‘jjas’, or ‘son’.</p></li>
+<li><p><strong>gaussian_sigma</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a><em> or </em><em>None</em><em>, </em><em>default None</em>) – Standard deviation for Gaussian smoothing. If None or &lt;= 0, no smoothing.</p></li>
+<li><p><strong>figsize</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.13)"><em>tuple</em></a><em>, </em><em>default</em><em> (</em><em>16</em><em>, </em><em>10</em><em>)</em>) – Figure size (width, height) in inches.</p></li>
+<li><p><strong>cmap</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em> or </em><em>matplotlib colormap</em><em>, </em><em>default 'coolwarm'</em>) – Colormap for the contour plot.</p></li>
+<li><p><strong>land_only</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a><em>, </em><em>default False</em>) – If True, mask out ocean areas to show land-only data.</p></li>
+<li><p><strong>levels</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a><em> or </em><em>array-like</em><em>, </em><em>default 30</em>) – Number of contour levels or explicit level boundaries for contourf.</p></li>
+<li><p><strong>save_plot_path</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>optional</em>) – Path where the plot should be saved. If None (default), the plot is not saved.</p></li>
+<li><p><strong>lat_name</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>optional</em>) – Name of latitude coordinate. If None, will auto-detect from common names.</p></li>
+<li><p><strong>lon_name</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>optional</em>) – Name of longitude coordinate. If None, will auto-detect from common names.</p></li>
+<li><p><strong>level_name</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>optional</em>) – Name of vertical level coordinate. If None, will auto-detect from common names.</p></li>
+<li><p><strong>time_name</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>default 'time'</em>) – Name of time coordinate.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The plot axes object for further customization.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://matplotlib.org/stable/api/_as_gen/matplotlib.axes.Axes.html#matplotlib.axes.Axes" title="(in Matplotlib v3.10.1)">matplotlib.axes.Axes</a></p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.13)"><strong>ValueError</strong></a> – If no data remains after selections and filtering, or if the dataset is None.</p>
+</dd>
+</dl>
+<p class="rubric">Notes</p>
+<p>This method supports Dask arrays through progress bar integration. The plot
+includes automatic title generation with time period, level, and smoothing details.</p>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="c1"># Basic temperature plot</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">ds</span><span class="o">.</span><span class="n">climate_plots</span><span class="o">.</span><span class="n">plot_mean</span><span class="p">(</span><span class="n">variable</span><span class="o">=</span><span class="s1">&#39;temperature&#39;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Plot with seasonal filtering and region selection</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">ds</span><span class="o">.</span><span class="n">climate_plots</span><span class="o">.</span><span class="n">plot_mean</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">variable</span><span class="o">=</span><span class="s1">&#39;air&#39;</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">season</span><span class="o">=</span><span class="s1">&#39;jjas&#39;</span><span class="p">,</span>  <span class="c1"># summer monsoon</span>
+<span class="gp">... </span>    <span class="n">latitude</span><span class="o">=</span><span class="nb">slice</span><span class="p">(</span><span class="mi">40</span><span class="p">,</span> <span class="mi">6</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="n">longitude</span><span class="o">=</span><span class="nb">slice</span><span class="p">(</span><span class="mi">65</span><span class="p">,</span> <span class="mi">100</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="n">levels</span><span class="o">=</span><span class="mi">150</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">cmap</span><span class="o">=</span><span class="s1">&#39;coolwarm&#39;</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Plot at specific pressure level with smoothing and saving</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">ds</span><span class="o">.</span><span class="n">climate_plots</span><span class="o">.</span><span class="n">plot_mean</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">variable</span><span class="o">=</span><span class="s1">&#39;air&#39;</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">level</span><span class="o">=</span><span class="mi">500</span><span class="p">,</span>  <span class="c1"># 500 hPa</span>
+<span class="gp">... </span>    <span class="n">gaussian_sigma</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">land_only</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">save_plot_path</span><span class="o">=</span><span class="s1">&#39;/home/user/Downloads/gph_500hPa.png&#39;</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Plot with time range selection</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">ds</span><span class="o">.</span><span class="n">climate_plots</span><span class="o">.</span><span class="n">plot_mean</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">variable</span><span class="o">=</span><span class="s1">&#39;air&#39;</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">time_range</span><span class="o">=</span><span class="nb">slice</span><span class="p">(</span><span class="s1">&#39;2000-01-01&#39;</span><span class="p">,</span><span class="s1">&#39;2010-12-31&#39;</span><span class="p">)</span>
+<span class="gp">... </span><span class="p">)</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="climate_diagnostics.plots.plot.PlotsAccessor.plot_std_time">
+<span class="sig-name descname"><span class="pre">plot_std_time</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">variable</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'air'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">latitude</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">longitude</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">level</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time_range</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">season</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'annual'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">gaussian_sigma</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">figsize</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">(16,</span> <span class="pre">10)</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cmap</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'viridis'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">land_only</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">levels</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">30</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">save_plot_path</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lat_name</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lon_name</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">level_name</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time_name</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'time'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/climate_diagnostics/plots/plot.html#PlotsAccessor.plot_std_time"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#climate_diagnostics.plots.plot.PlotsAccessor.plot_std_time" title="Link to this definition"></a></dt>
+<dd><p>Plot temporal standard deviation of a climate variable.</p>
+<p>Creates a filled contour plot showing the standard deviation over time for the
+selected variable, with support for seasonal filtering, level selection, and
+spatial smoothing.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>variable</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>default 'air'</em>) – Name of the climate variable to plot from the dataset.</p></li>
+<li><p><strong>latitude</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#slice" title="(in Python v3.13)"><em>slice</em></a><em>, </em><em>array-like</em><em>, or </em><em>scalar</em><em>, </em><em>optional</em>) – Latitude range or points to select.</p></li>
+<li><p><strong>longitude</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#slice" title="(in Python v3.13)"><em>slice</em></a><em>, </em><em>array-like</em><em>, or </em><em>scalar</em><em>, </em><em>optional</em>) – Longitude range or points to select.</p></li>
+<li><p><strong>level</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/library/functions.html#slice" title="(in Python v3.13)"><em>slice</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.13)"><em>list</em></a><em>, or </em><em>array-like</em><em>, </em><em>optional</em>) – Vertical level(s) to select. If a single value, the nearest level is used.
+If multiple values, standard deviations are averaged across levels.</p></li>
+<li><p><strong>time_range</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#slice" title="(in Python v3.13)"><em>slice</em></a><em> or </em><em>array-like</em><em>, </em><em>optional</em>) – Time range to select for calculating temporal standard deviation.</p></li>
+<li><p><strong>season</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>default 'annual'</em>) – Season to filter by: ‘annual’, ‘djf’, ‘mam’, ‘jja’, ‘jjas’, or ‘son’.</p></li>
+<li><p><strong>gaussian_sigma</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a><em> or </em><em>None</em><em>, </em><em>default None</em>) – Standard deviation for Gaussian smoothing. If None or &lt;= 0, no smoothing.</p></li>
+<li><p><strong>figsize</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.13)"><em>tuple</em></a><em>, </em><em>default</em><em> (</em><em>16</em><em>, </em><em>10</em><em>)</em>) – Figure size (width, height) in inches.</p></li>
+<li><p><strong>cmap</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em> or </em><em>matplotlib colormap</em><em>, </em><em>default 'viridis'</em>) – Colormap for the contour plot.</p></li>
+<li><p><strong>land_only</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a><em>, </em><em>default False</em>) – If True, mask out ocean areas to show land-only data.</p></li>
+<li><p><strong>levels</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a><em> or </em><em>array-like</em><em>, </em><em>default 30</em>) – Number of contour levels or explicit level boundaries for contourf.</p></li>
+<li><p><strong>save_plot_path</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>optional</em>) – Path where the plot should be saved. If None (default), the plot is not saved.</p></li>
+<li><p><strong>lat_name</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>optional</em>) – Name of latitude coordinate. If None, will auto-detect from common names.</p></li>
+<li><p><strong>lon_name</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>optional</em>) – Name of longitude coordinate. If None, will auto-detect from common names.</p></li>
+<li><p><strong>level_name</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>optional</em>) – Name of vertical level coordinate. If None, will auto-detect from common names.</p></li>
+<li><p><strong>time_name</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>default 'time'</em>) – Name of time coordinate.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The plot axes object for further customization.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://matplotlib.org/stable/api/_as_gen/matplotlib.axes.Axes.html#matplotlib.axes.Axes" title="(in Matplotlib v3.10.1)">matplotlib.axes.Axes</a></p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.13)"><strong>ValueError</strong></a> – If no data remains after selections and filtering, if the dataset is None,
+    or if fewer than 2 time points are available for standard deviation calculation.</p>
+</dd>
+</dl>
+<p class="rubric">Notes</p>
+<p>This method shows the geographic pattern of temporal variability, highlighting
+regions with high or low variability over the selected time period. The plot
+includes automatic title generation with time period, level, and smoothing details.</p>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="c1"># Basic standard deviation plot</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">ds</span><span class="o">.</span><span class="n">climate_plots</span><span class="o">.</span><span class="n">plot_std_time</span><span class="p">(</span><span class="n">variable</span><span class="o">=</span><span class="s1">&#39;temperature&#39;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Plot standard deviation of monsoon rainfall</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">ds</span><span class="o">.</span><span class="n">climate_plots</span><span class="o">.</span><span class="n">plot_std_time</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">variable</span><span class="o">=</span><span class="s1">&#39;prate&#39;</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">season</span><span class="o">=</span><span class="s1">&#39;jjas&#39;</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">latitude</span><span class="o">=</span><span class="nb">slice</span><span class="p">(</span><span class="mi">40</span><span class="p">,</span> <span class="mi">6</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="n">longitude</span><span class="o">=</span><span class="nb">slice</span><span class="p">(</span><span class="mi">60</span><span class="p">,</span> <span class="mi">100</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="n">cmap</span><span class="o">=</span><span class="s1">&#39;YlOrRd&#39;</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">levels</span><span class="o">=</span><span class="mi">150</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Plot interannual variability with smoothing</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">ds</span><span class="o">.</span><span class="n">climate_plots</span><span class="o">.</span><span class="n">plot_std_time</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">variable</span><span class="o">=</span><span class="s1">&#39;sea_surface_temperature&#39;</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">gaussian_sigma</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">time_range</span><span class="o">=</span><span class="nb">slice</span><span class="p">(</span><span class="s1">&#39;1950-01-01&#39;</span><span class="p">,</span> <span class="s1">&#39;2020-12-28&#39;</span><span class="p">)</span>
+<span class="gp">... </span><span class="p">)</span>
+</pre></div>
+</div>
+</dd></dl>
+
+</dd></dl>
+
 </section>
 
 
