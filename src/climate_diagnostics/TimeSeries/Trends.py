@@ -678,7 +678,8 @@ class TrendsAccessor:
                            period=12,
                            plot_map=True,
                            land_only = False,
-                           save_plot_path=None):
+                           save_plot_path=None,
+                           cmap = 'coolwarm'):
         """
         Calculate and visualize spatial trends using STL decomposition for each grid point.
 
@@ -717,6 +718,8 @@ class TrendsAccessor:
             If True, mask out ocean areas to show land-only data
         save_plot_path : str, optional
             Path to save the plot image. If None, plot is shown but not saved.
+        cmap : str, optional
+            cmap for the contour plots, defaults to 'coolwarm'
 
         Returns
         -------
@@ -967,7 +970,7 @@ class TrendsAccessor:
                     contour = trend_computed.plot.contourf(
                         ax=ax,
                         transform=ccrs.PlateCarree(),
-                        cmap='RdBu_r',
+                        cmap=cmap,
                         robust=True,
                         levels=40,
                         extend='both',
