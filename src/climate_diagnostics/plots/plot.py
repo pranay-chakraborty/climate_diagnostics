@@ -11,92 +11,90 @@ class PlotsAccessor:
     """
     Geographical visualizations of climate data using contour plots.
     
-    This accessor provides methods for visualizing climate data with support for:
-    - Seasonal filtering (annual, DJF, MAM, JJA, JJAS, SON)
-    - Spatial mean calculations
-    - Temporal standard deviation calculations
-    - Gaussian smoothing for cleaner visualizations
-    - Level selection and averaging
-    - Land-only visualization options
+    Provides methods for visualizing climate data with support for seasonal filtering,
+    spatial calculations, smoothing, and various visualization options.
     
     Access via the .climate_plots attribute on xarray Datasets.
+    
     Examples
     --------
-    >>> import xarray as xr
-    >>> # Open a climate dataset with lat, lon, time dimensions
     >>> ds = xr.open_dataset('climate_data.nc')
-    >>> 
-    >>> # Create a basic plot using the accessor
     >>> ds.climate_plots.plot_mean(variable='air')
-    >>> 
-    >>> # Filter for winter season and specific region
-    >>> ds.climate_plots.plot_mean(
-    ...     variable='air', 
-    ...     season='djf',
-    ...     latitude=slice(40, 6),
-    ...     longitude=slice(65,110)
-    ... )
+    >>> ds.climate_plots.plot_mean(variable='air', season='djf', 
+    ...                           latitude=slice(40, 6), longitude=slice(65,110))
     """
 
     def __init__(self, xarray_obj):
+        """Initialize the climate plots accessor with an xarray Dataset."""
+        self._obj = xarray_obj
+
+    def _get_coord_name(self, possible_names):
         """
-        Initialize the climate plots accessor.
+        Find the actual coordinate name in the dataset from a list of common alternatives.
         
         Parameters
         ----------
-        xarray_obj : xarray.Dataset
-            The xarray Dataset containing climate data variables with spatial
-            coordinates (latitude/longitude) and optionally time and level dimensions.
+        possible_names : list of str
+            List of possible coordinate names to search for (e.g., ['lat', 'latitude'])
+            
+        Returns
+        -------
+        str or None
+            The first matching coordinate name found in the dataset, or None if no match
         """
-        self._obj = xarray_obj
-
+        if self._obj is None: return None
+    
+        for name in possible_names:
+            if name in self._obj.coords:
+                return name
+        coord_names = {name.lower(): name for name in self._obj.coords}
+        for name in possible_names:
+            if name.lower() in coord_names:
+                return coord_names[name.lower()]
+        
+        return None
 
     def _filter_by_season(self, data_subset, season='annual'):
         """
-         Filter data by meteorological season.
+        Filter data by meteorological season.
         
         Parameters
         ----------
         data_subset : xarray.Dataset or xarray.DataArray
-            Input data containing a time dimension to filter by season.
+            Input data containing a time dimension
         season : str, default 'annual'
-            Meteorological season to filter by. Options:
-            - 'annual': No filtering, returns all data
-            - 'djf': December, January, February (Winter)
-            - 'mam': March, April, May (Spring)
-            - 'jjas': June, July, August, September (Summer Monsoon)
-            - 'son': September, October, November (Autumn)
+            Options: 'annual', 'djf', 'mam', 'jjas', 'son'
             
         Returns
         -------
         xarray.Dataset or xarray.DataArray
-            Data filtered to include only the specified season.
-            
-        Raises
-        ------
-        ValueError
-            If time dimension is not found or month information cannot be determined.
-        
+            Data filtered to include only the specified season
         """
         if season.lower() == 'annual':
             return data_subset
-        if 'time' not in data_subset.dims:
-            raise ValueError("Cannot filter by season - 'time' dimension not found.")
+        
+        
+        time_coord_name = self._get_coord_name(['time', 't'])
+        if time_coord_name is None:
+                raise ValueError("Cannot find time coordinate for seasonal filtering.")
+        
+        if time_coord_name not in data_subset.dims:
+            raise ValueError(f"Cannot filter by season - '{time_coord_name}' dimension not found.")
 
         if 'month' in data_subset.coords:
             month_coord = data_subset['month']
-        elif np.issubdtype(data_subset['time'].dtype, np.datetime64):
-             month_coord = data_subset.time.dt.month
+        elif np.issubdtype(data_subset[time_coord_name].dtype, np.datetime64):
+            month_coord = data_subset[time_coord_name].dt.month
         else:
-             raise ValueError("Cannot determine month for seasonal filtering.")
+            raise ValueError("Cannot determine month for seasonal filtering.")
 
         season_months = {'jjas': [6, 7, 8, 9], 'djf': [12, 1, 2], 'mam': [3, 4, 5], 'son': [9, 10, 11]}
         selected_months = season_months.get(season.lower())
 
         if selected_months:
-            filtered_data = data_subset.where(month_coord.isin(selected_months), drop=True) # Use where for safety
-            if filtered_data.time.size == 0:
-                 print(f"Warning: No data found for season '{season.upper()}' within the selected time range.")
+            filtered_data = data_subset.where(month_coord.isin(selected_months), drop=True)
+            if filtered_data[time_coord_name].size == 0:
+                print(f"Warning: No data found for season '{season.upper()}' within the selected time range.")
             return filtered_data
         else:
             print(f"Warning: Unknown season '{season}'. Returning unfiltered data.")
@@ -109,40 +107,31 @@ class PlotsAccessor:
         Parameters
         ----------
         data_array : xarray.DataArray
-            Input data array to smooth. Should have at least 2 spatial dimensions,
-            typically latitude and longitude as the last two dimensions.
+            Input data array to smooth
         gaussian_sigma : float or None
-            Standard deviation for Gaussian kernel. If None or <= 0,
-            no smoothing is applied.
+            Standard deviation for Gaussian kernel
             
         Returns
         -------
         xarray.DataArray
-            Smoothed data array with the same dimensions and coordinates.
+            Smoothed data array
         bool
-            Flag indicating whether smoothing was successfully applied.
-            
-        Notes
-        -----
-        Gaussian filter is applied only to the last two dimensions (assumed to be 
-        spatial). All other dimensions are preserved as-is. The function handles
-        Dask arrays by computing them before filtering. Mode 'nearest' is used
-        for boundary handling to minimize edge artifacts.
+            Whether smoothing was applied
         """
         if gaussian_sigma is None or gaussian_sigma <= 0:
-            return data_array, False # No filtering
+            return data_array, False
 
         if data_array.ndim < 2:
             print("Warning: Gaussian filtering skipped (data < 2D).")
             return data_array, False
 
-        # Assume spatial dimensions are the last two
+        # Apply smoothing to last two dimensions (spatial)
         sigma_array = [0] * (data_array.ndim - 2) + [gaussian_sigma] * 2
 
         try:
             # Ensure data is computed if dask array
             computed_data = data_array.compute() if hasattr(data_array, 'compute') else data_array
-            smoothed_values = ndimage.gaussian_filter(computed_data.values, sigma=sigma_array, mode='nearest') # Use mode='nearest' for boundaries
+            smoothed_values = ndimage.gaussian_filter(computed_data.values, sigma=sigma_array, mode='nearest')
 
             smoothed_da = xr.DataArray(
                 smoothed_values, coords=computed_data.coords, dims=computed_data.dims,
@@ -161,58 +150,42 @@ class PlotsAccessor:
         Parameters
         ----------
         variable : str
-            Name of the variable to select from the dataset.
-        latitude : slice, array-like, or scalar, optional
-            Latitude range or points to select.
-        longitude : slice, array-like, or scalar, optional
-            Longitude range or points to select.
-        level : int, float, slice, list, or array-like, optional
-            Vertical level(s) to select. If a single value, the nearest level is used.
-            If multiple values, they're selected for potential averaging.
-        time_range : slice or array-like, optional
-            Time range to select.
+            Name of the variable to select
+        latitude, longitude, level, time_range : optional
+            Coordinate constraints
             
         Returns
         -------
         xarray.DataArray
-            Selected data subset.
+            Selected data subset
         str or None
-            Name of the level dimension if found, otherwise None.
+            Level dimension name if found
         str or None
-            Level operation type performed:
-            - 'range_selected': Multiple levels selected
-            - 'single_selected': Single level selected
-            - None: No level dimension or selection
-            
-        Raises
-        ------
-        ValueError
-            If the dataset is None, the variable is not found, or if 
-            requested coordinates are outside available range.
-            
-        Notes
-        -----
-        For level selection, this method will try to identify the level dimension as
-        either 'level' or 'lev'. Nearest neighbor interpolation is used when selecting 
-        a single level value that doesn't exactly match coordinates.
+            Level operation type: 'range_selected', 'single_selected', or None
         """
-        
-        
         if variable not in self._obj.data_vars:
             raise ValueError(f"Variable '{variable}' not found.")
 
         data_var = self._obj[variable]
         selection_dict = {}
-        method_dict = {} # For 'nearest'
+        method_dict = {}
+
+        # Find coordinate names
+        lat_name = self._get_coord_name(['lat', 'latitude', 'LAT', 'LATITUDE', 'y', 'rlat', 'nav_lat'])
+        lon_name = self._get_coord_name(['lon', 'longitude', 'LON', 'LONGITUDE', 'x', 'rlon', 'nav_lon'])
+        time_name = self._get_coord_name(['time', 't'])
+        level_names = ['level', 'lev', 'plev', 'height', 'altitude', 'depth', 'z']
+        level_dim_name = next((dim for dim in level_names if dim in data_var.dims), None)
+        level_op = None
 
         # Validate latitude coordinates
         if latitude is not None:
-            if 'lat' not in data_var.coords:
-                raise ValueError("Latitude coordinate 'lat' not found in dataset.")
+            if lat_name is None:
+                raise ValueError("No latitude coordinate found. Expected one of: lat, latitude, etc.")
             
-            lat_min, lat_max = data_var.lat.min().item(), data_var.lat.max().item()
+            lat_min, lat_max = data_var[lat_name].min().item(), data_var[lat_name].max().item()
             
-            # Check if latitude selection is completely outside the available range
+            # Check if latitude selection is completely outside available range
             if isinstance(latitude, slice):
                 if latitude.start is not None and latitude.start > lat_max:
                     raise ValueError(f"Requested latitude minimum {latitude.start} is greater than available maximum {lat_max}")
@@ -225,16 +198,16 @@ class PlotsAccessor:
                 if latitude < lat_min or latitude > lat_max:
                     raise ValueError(f"Requested latitude {latitude} is outside available range [{lat_min}, {lat_max}]")
             
-            selection_dict['lat'] = latitude
+            selection_dict[lat_name] = latitude
 
         # Validate longitude coordinates
         if longitude is not None:
-            if 'lon' not in data_var.coords:
-                raise ValueError("Longitude coordinate 'lon' not found in dataset.")
+            if lon_name is None:
+                raise ValueError("No longitude coordinate found. Expected one of: lon, longitude, etc.")
             
-            lon_min, lon_max = data_var.lon.min().item(), data_var.lon.max().item()
+            lon_min, lon_max = data_var[lon_name].min().item(), data_var[lon_name].max().item()
             
-            # Check if longitude selection is completely outside the available range
+            # Check if longitude selection is completely outside available range
             if isinstance(longitude, slice):
                 if longitude.start is not None and longitude.start > lon_max:
                     raise ValueError(f"Requested longitude minimum {longitude.start} is greater than available maximum {lon_max}")
@@ -247,18 +220,13 @@ class PlotsAccessor:
                 if longitude < lon_min or longitude > lon_max:
                     raise ValueError(f"Requested longitude {longitude} is outside available range [{lon_min}, {lon_max}]")
             
-            selection_dict['lon'] = longitude
+            selection_dict[lon_name] = longitude
 
         # Validate time range
-        if time_range is not None and 'time' in data_var.dims:
-            if 'time' not in data_var.coords:
-                raise ValueError("Time coordinate 'time' not found in dataset.")
-            
-            # For time, we need to be careful with datetime comparisons
+        if time_range is not None and time_name and time_name in data_var.dims:
             try:
-                time_min, time_max = data_var.time.min().values, data_var.time.max().values
+                time_min, time_max = data_var[time_name].min().values, data_var[time_name].max().values
                 
-                # Check if time selection is completely outside the available range
                 if isinstance(time_range, slice):
                     if time_range.start is not None:
                         if np.datetime64(time_range.start) > time_max:
@@ -271,21 +239,16 @@ class PlotsAccessor:
                     if np.datetime64(t_min) > time_max or np.datetime64(t_max) < time_min:
                         raise ValueError(f"Requested time range is outside available range [{time_min}, {time_max}]")
             except (TypeError, ValueError) as e:
-                # If we can't compare the times, proceed and let xarray handle it
                 print(f"Warning: Could not validate time range: {e}")
             
-            selection_dict['time'] = time_range
+            selection_dict[time_name] = time_range
 
-        level_dim_name = next((dim for dim in ['level', 'lev'] if dim in data_var.dims), None)
-        level_op = None # To track if level mean/selection occurred
-
+        # Handle level selection
         if level_dim_name:
             if level is not None:
-                # Validate level coordinates
                 level_min, level_max = data_var[level_dim_name].min().item(), data_var[level_dim_name].max().item()
                 
                 if isinstance(level, (slice, list, np.ndarray)):
-                    # Check if completely outside range
                     if isinstance(level, slice):
                         if level.start is not None and level.start > level_max:
                             raise ValueError(f"Requested level minimum {level.start} is greater than available maximum {level_max}")
@@ -297,7 +260,6 @@ class PlotsAccessor:
                     selection_dict[level_dim_name] = level
                     level_op = 'range_selected'
                 elif isinstance(level, (int, float)):
-                    # For single values with 'nearest' method, warn if far outside range
                     if level < level_min * 0.5 or level > level_max * 1.5:
                         print(f"Warning: Requested level {level} is far from available range [{level_min}, {level_max}]")
                     
@@ -308,7 +270,6 @@ class PlotsAccessor:
                     selection_dict[level_dim_name] = level
                     level_op = 'single_selected'
             elif len(data_var[level_dim_name]) > 1:
-                # Default to first level if multiple exist and none specified
                 level_val = data_var[level_dim_name].values[0]
                 selection_dict[level_dim_name] = level_val
                 level_op = 'single_selected'
@@ -346,82 +307,43 @@ class PlotsAccessor:
         """
         Plot spatial mean of a climate variable with optional filtering and smoothing.
         
-        Creates a filled contour plot showing the temporal mean of the selected variable,
-        with support for seasonal filtering, level selection, and spatial smoothing.
-        
         Parameters
         ----------
         variable : str, default 'air'
-            Name of the climate variable to plot from the dataset.
-        latitude : slice, array-like, or scalar, optional
-            Latitude range or points to select.
-        longitude : slice, array-like, or scalar, optional
-            Longitude range or points to select.
-        level : int, float, slice, list, or array-like, optional
-            Vertical level(s) to select. If a single value, the nearest level is used.
-            If multiple values, they're averaged.
-        time_range : slice or array-like, optional
-            Time range to select for temporal averaging.
+            Name of the climate variable to plot
+        latitude, longitude : optional
+            Coordinate constraints
+        level : optional
+            Vertical level(s) to select
+        time_range : optional
+            Time range for temporal averaging
         season : str, default 'annual'
-            Season to filter by: 'annual', 'djf', 'mam', 'jja', 'jjas', or 'son'.
+            Options: 'annual', 'djf', 'mam', 'jja', 'jjas', 'son'
         gaussian_sigma : float or None, default None
-            Standard deviation for Gaussian smoothing. If None or <= 0, no smoothing.
+            Smoothing parameter for spatial filtering
         figsize : tuple, default (16, 10)
-            Figure size (width, height) in inches.
+            Figure dimensions
         cmap : str or matplotlib colormap, default 'coolwarm'
-            Colormap for the contour plot.
+            Colormap for the plot
         land_only : bool, default False
-            If True, mask out ocean areas to show land-only data.
+            Mask out ocean areas if True
         levels : int or array-like, default 30
-            Number of contour levels or explicit level boundaries for contourf.
+            Number of contour levels or explicit boundaries
         save_plot_path : str, optional
-             Path where the plot should be saved. If None (default), the plot is not saved.
+             Path to save the plot
             
         Returns
         -------
         matplotlib.axes.Axes
-            The plot axes object for further customization.
+            The plot axes object
             
-        Raises
-        ------
-        ValueError
-            If no data remains after selections and filtering, or if the dataset is None.
-            
-        Notes
-        -----
-        This method supports Dask arrays through progress bar integration. The plot
-        includes automatic title generation with time period, level, and smoothing details.
-        
         Examples
         --------
-        >>> # Basic temperature plot
         >>> ds.climate_plots.plot_mean(variable='temperature')
-        >>> 
-        >>> # Plot with seasonal filtering and region selection
-        >>> ds.climate_plots.plot_mean(
-        ...     variable='air',
-        ...     season='jjas',  # summer monsoon
-        ...     latitude=slice(40, 6),
-        ...     longitude=slice(65, 100),
-        ...     levels=150,
-        ...     cmap='coolwarm'
-        ... )
-        >>> 
-        >>> # Plot at specific pressure level with smoothing and saving
-        >>> ds.climate_plots.plot_mean(
-        ...     variable='air',
-        ...     level=500,  # 500 hPa
-        ...     gaussian_sigma=1,
-        ...     land_only=True,
-        ...     save_plot_path='/home/user/Downloads/gph_500hPa.png'
-        ... )
-        >>> 
-        >>> # Plot with time range selection
-        >>> ds.climate_plots.plot_mean(
-        ...     variable='air',
-        ...     time_range=slice('2000-01-01','2010-12-31')
-        ... )
-        
+        >>> ds.climate_plots.plot_mean(variable='air', season='jjas',
+        ...     latitude=slice(40, 6), longitude=slice(65, 100))
+        >>> ds.climate_plots.plot_mean(variable='air', level=500,
+        ...     gaussian_sigma=1, land_only=True)
         """
         selected_data, level_dim_name, level_op = self._select_data(
             variable, latitude, longitude, level, time_range
@@ -445,48 +367,53 @@ class PlotsAccessor:
             else:
                  mean_data = data_season.mean(dim='time')
         else:
-            mean_data = data_season # No time dim to average
+            mean_data = data_season
             print("Warning: No time dimension found for averaging.")
 
         # Apply smoothing
         smoothed_data, was_smoothed = self._apply_gaussian_filter(mean_data, gaussian_sigma)
 
-       # --- Plotting with contourf because it gives better results---
+        # Create the plot
         plt.figure(figsize=figsize)
         ax = plt.axes(projection=ccrs.PlateCarree())
         
         # Add geographic features
         if land_only:
-            # Add borders first with higher zorder
             ax.add_feature(cfeature.BORDERS, linestyle='--', linewidth=1, zorder=3)
-            # Add coastlines with higher zorder
             ax.coastlines(zorder=3)
         else:
-            # Standard display without ocean masking
             ax.add_feature(cfeature.BORDERS, linestyle='--', linewidth=1)
             ax.coastlines()
             
         gl = ax.gridlines(draw_labels=True, linestyle='--', alpha=0.5)
-        gl.top_labels = False; gl.right_labels = False # Tidy labels
+        gl.top_labels = False; gl.right_labels = False
 
-        # Prepare for contourf
-        lon_coords = smoothed_data['lon'].values
-        lat_coords = smoothed_data['lat'].values
+        
+        # Get coordinate names from the data
+        lat_name = self._get_coord_name(['lat', 'latitude', 'LAT', 'LATITUDE', 'y', 'rlat', 'nav_lat'])
+        lon_name = self._get_coord_name(['lon', 'longitude', 'LON', 'LONGITUDE', 'x', 'rlon', 'nav_lon'])
+        time_name = self._get_coord_name(['time', 't'])
+
+        if not lat_name or not lon_name:
+            raise ValueError("Could not find latitude/longitude coordinates in the data")
+        
+        
+        # Prepare contourf plot
+        lon_coords = smoothed_data[lon_name].values
+        lat_coords = smoothed_data[lat_name].values
         plot_data_np = smoothed_data.values
 
-        # Handle potential all-nan slices after operations
         if np.all(np.isnan(plot_data_np)):
              print("Warning: Data is all NaN after calculations. Cannot plot contours.")
              ax.set_title(f'{variable.capitalize()} - Data is all NaN')
              return ax
 
         im = ax.contourf(lon_coords, lat_coords, plot_data_np,
-                         levels=levels, cmap=cmap, # Use specified levels
+                         levels=levels, cmap=cmap,
                          transform=ccrs.PlateCarree(), extend='both')
                          
-        # Add ocean mask if land_only is True
+        # Add ocean mask if requested
         if land_only:
-            # Mask out oceans with white color
             ax.add_feature(cfeature.OCEAN, zorder=2, facecolor='white')
 
         # Add Colorbar
@@ -494,47 +421,34 @@ class PlotsAccessor:
         cbar_label = f"{smoothed_data.attrs.get('long_name', variable)} ({unit_label})"
         plt.colorbar(im, label=cbar_label, orientation='vertical', pad=0.05, shrink=0.8)
 
-        # Add Title
+        # Build title
         season_map = {
-        'annual': "Annual",
-        'djf': "Winter (DJF)",
-        'mam': "Spring (MAM)",
-        'jja': "Summer (JJA)", 
-        'jjas': "Summer Monsoon (JJAS)",
-        'son': "Autumn (SON)"
+        'annual': "Annual", 'djf': "Winter (DJF)", 'mam': "Spring (MAM)",
+        'jja': "Summer (JJA)", 'jjas': "Summer Monsoon (JJAS)", 'son': "Autumn (SON)"
         }
         season_str = season_map.get(season.lower(), season.upper())
-
-        # Format variable name nicely
         var_name = variable.replace('_', ' ').capitalize()
-
-        # Base title
         title = f"{season_str} Mean of {var_name}"
 
-        # Add level information
+        # Add level info to title
         if level_op == 'single_selected' and level_dim_name:
-            # Get the actual selected level value after selection with 'nearest' method
             actual_level = smoothed_data[level_dim_name].values.item()
             level_unit = smoothed_data[level_dim_name].attrs.get('units', '')
             title += f"\nLevel={actual_level} {level_unit}"
         elif level_op == 'range_selected':
             title += " (Level Mean)"
 
-        
+        # Add time period to title
         try:
-            # Extract directly from the data
-            start_time = data_season['time'].min().dt.strftime('%Y').item()
-            end_time = data_season['time'].max().dt.strftime('%Y').item()
-            time_str = f"\n({start_time}-{end_time})"
-            title += time_str
-        except Exception as e:
-            # Fallback to parameter-based approach if possible
+            start_time = data_season[time_name].min().dt.strftime('%Y').item()
+            end_time = data_season[time_name].max().dt.strftime('%Y').item()
+            title += f"\n({start_time}-{end_time})"
+        except Exception:
             if time_range is not None and hasattr(time_range, 'start') and hasattr(time_range, 'stop'):
                 try:
-                    time_str = f"\n({time_range.start.strftime('%Y')}-{time_range.stop.strftime('%Y')})"
-                    title += time_str
+                    title += f"\n({time_range.start.strftime('%Y')}-{time_range.stop.strftime('%Y')})"
                 except (AttributeError, TypeError):
-                    pass  # Skip if this approach fails too
+                    pass
 
         # Add smoothing info
         if was_smoothed:
@@ -542,11 +456,11 @@ class PlotsAccessor:
 
         ax.set_title(title, fontsize=12)
 
-        # Set extent from data - adjust if needed
+        # Set extent from data
         try:
             ax.set_extent([lon_coords.min(), lon_coords.max(), lat_coords.min(), lat_coords.max()], crs=ccrs.PlateCarree())
         except ValueError as e:
-             print(f"Warning: Could not automatically set extent: {e}") # e.g., if coords are non-monotonic after sel
+             print(f"Warning: Could not automatically set extent: {e}")
 
         if save_plot_path is not None:
             plt.savefig(save_plot_path, bbox_inches='tight', dpi=300)
@@ -566,86 +480,52 @@ class PlotsAccessor:
                       cmap='viridis', 
                       land_only = False,
                       levels=30,
-                      save_plot_path = None): # Added levels arg
+                      save_plot_path = None):
         """
         Plot temporal standard deviation of a climate variable.
-        
-        Creates a filled contour plot showing the standard deviation over time for the
-        selected variable, with support for seasonal filtering, level selection, and
-        spatial smoothing.
         
         Parameters
         ----------
         variable : str, default 'air'
-            Name of the climate variable to plot from the dataset.
-        latitude : slice, array-like, or scalar, optional
-            Latitude range or points to select.
-        longitude : slice, array-like, or scalar, optional
-            Longitude range or points to select.
-        level : int, float, slice, list, or array-like, optional
-            Vertical level(s) to select. If a single value, the nearest level is used.
-            If multiple values, standard deviations are averaged across levels.
-        time_range : slice or array-like, optional
-            Time range to select for calculating temporal standard deviation.
+            Name of the climate variable to plot
+        latitude, longitude : optional
+            Coordinate constraints
+        level : optional
+            Vertical level(s) to select
+        time_range : optional
+            Time range for calculation
         season : str, default 'annual'
-            Season to filter by: 'annual', 'djf', 'mam', 'jja', 'jjas', or 'son'.
+            Options: 'annual', 'djf', 'mam', 'jja', 'jjas', 'son'
         gaussian_sigma : float or None, default None
-            Standard deviation for Gaussian smoothing. If None or <= 0, no smoothing.
+            Smoothing parameter for spatial filtering
         figsize : tuple, default (16, 10)
-            Figure size (width, height) in inches.
+            Figure dimensions
         cmap : str or matplotlib colormap, default 'viridis'
-            Colormap for the contour plot.
+            Colormap for the plot
         land_only : bool, default False
-            If True, mask out ocean areas to show land-only data.
+            Mask out ocean areas if True
         levels : int or array-like, default 30
-            Number of contour levels or explicit level boundaries for contourf.
+            Number of contour levels or explicit boundaries
         save_plot_path : str, optional
-            Path where the plot should be saved. If None (default), the plot is not saved.
+            Path to save the plot
             
         Returns
         -------
         matplotlib.axes.Axes
-            The plot axes object for further customization.
+            The plot axes object
             
-        Raises
-        ------
-        ValueError
-            If no data remains after selections and filtering, if the dataset is None,
-            or if fewer than 2 time points are available for standard deviation calculation.
-            
-        Notes
-        -----
-        This method shows the geographic pattern of temporal variability, highlighting
-        regions with high or low variability over the selected time period. The plot
-        includes automatic title generation with time period, level, and smoothing details.
-        
         Examples
         --------
-        >>> # Basic standard deviation plot
         >>> ds.climate_plots.plot_std_time(variable='temperature')
-        >>> 
-        >>> # Plot standard deviation of monsoon rainfall
-        >>> ds.climate_plots.plot_std_time(
-        ...     variable='prate',
-        ...     season='jjas',
-        ...     latitude=slice(40, 6),
-        ...     longitude=slice(60, 100),
-        ...     cmap='YlOrRd',
-        ...     levels=150
-        ... )
-        >>> 
-        >>> # Plot interannual variability with smoothing
-        >>> ds.climate_plots.plot_std_time(
-        ...     variable='sea_surface_temperature',
-        ...     gaussian_sigma=1.0,
-        ...     time_range=slice('1950-01-01', '2020-12-28')
-        ... )
+        >>> ds.climate_plots.plot_std_time(variable='prate', season='jjas',
+        ...     latitude=slice(40, 6), longitude=slice(60, 100))
+        >>> ds.climate_plots.plot_std_time(variable='sst', gaussian_sigma=1.0)
         """
         selected_data, level_dim_name, level_op = self._select_data(
             variable, latitude, longitude, level, time_range
         )
 
-       # Filter by season
+        # Validate time dimension
         if 'time' not in selected_data.dims:
              raise ValueError("Standard deviation requires 'time' dimension.")
         data_season = self._filter_by_season(selected_data, season)
@@ -655,15 +535,14 @@ class PlotsAccessor:
         if data_season.sizes['time'] < 2:
              raise ValueError(f"Std dev requires > 1 time point (found {data_season.sizes['time']}).")
 
-
-        # Compute standard deviation over time
+        # Compute standard deviation
         if data_season.chunks:
             print("Computing standard deviation over time...")
             with ProgressBar(): std_data = data_season.std(dim='time').compute()
         else:
             std_data = data_season.std(dim='time')
 
-        # Average std dev map across levels if a range was selected originally
+        # Average across levels if needed
         if level_op == 'range_selected' and level_dim_name in std_data.dims:
              std_data = std_data.mean(dim=level_dim_name)
              print(f"Averaging standard deviation map across selected levels.")
@@ -671,92 +550,79 @@ class PlotsAccessor:
         # Apply smoothing
         smoothed_data, was_smoothed = self._apply_gaussian_filter(std_data, gaussian_sigma)
 
-        # --- Plotting with contourf ---
-               # --- Plotting with contourf ---
+        # Create the plot
         plt.figure(figsize=figsize)
         ax = plt.axes(projection=ccrs.PlateCarree())
         
         # Add geographic features
         if land_only:
-            # Add borders first with higher zorder
             ax.add_feature(cfeature.BORDERS, linestyle='--', linewidth=1, zorder=3)
-            # Add coastlines with higher zorder
             ax.coastlines(zorder=3)
         else:
-            # Standard display without ocean masking
             ax.add_feature(cfeature.BORDERS, linestyle='--', linewidth=1)
             ax.coastlines()
             
         gl = ax.gridlines(draw_labels=True, linestyle='--', alpha=0.5)
         gl.top_labels = False; gl.right_labels = False
 
-        lon_coords = smoothed_data['lon'].values
-        lat_coords = smoothed_data['lat'].values
-        plot_data_np = smoothed_data.values
+       # Get coordinate names
+        lat_name = self._get_coord_name(['lat', 'latitude', 'LAT', 'LATITUDE', 'y', 'rlat', 'nav_lat'])
+        lon_name = self._get_coord_name(['lon', 'longitude', 'LON', 'LONGITUDE', 'x', 'rlon', 'nav_lon'])
+        time_name = self._get_coord_name(['time', 't'])
 
+        if not lat_name or not lon_name:
+            raise ValueError("Could not find latitude/longitude coordinates in the data")
+
+        lon_coords = smoothed_data[lon_name].values
+        lat_coords = smoothed_data[lat_name].values
+        plot_data_np = smoothed_data.values
+        
         if np.all(np.isnan(plot_data_np)):
             print("Warning: Data is all NaN after calculations. Cannot plot contours.")
             ax.set_title(f'{variable.capitalize()} Std Dev - Data is all NaN')
             return ax
 
         im = ax.contourf(lon_coords, lat_coords, plot_data_np,
-                         levels=levels, cmap=cmap, # Use specified levels
+                         levels=levels, cmap=cmap,
                          transform=ccrs.PlateCarree(), extend='both')
                          
-        # Add ocean mask if land_only is True
+        # Add ocean mask if requested
         if land_only:
-            # Mask out oceans with white color
             ax.add_feature(cfeature.OCEAN, zorder=2, facecolor='white')
 
         # Colorbar
-        unit_label = smoothed_data.attrs.get('units', '') # Std dev has same units
+        unit_label = smoothed_data.attrs.get('units', '')
         cbar_label = f"Std. Dev. ({unit_label})"
         plt.colorbar(im, label=cbar_label, orientation='vertical', pad=0.05, shrink=0.8)
 
-        # Title
-        # Create more descriptive title
-        # Format season name
+        # Build title
         season_map = {
-            'annual': "Annual",
-            'djf': "Winter (DJF)",
-            'mam': "Spring (MAM)",
-            'jja': "Summer (JJA)", 
-            'jjas': "Summer Monsoon (JJAS)",
-            'son': "Autumn (SON)"
+            'annual': "Annual", 'djf': "Winter (DJF)", 'mam': "Spring (MAM)",
+            'jja': "Summer (JJA)", 'jjas': "Summer Monsoon (JJAS)", 'son': "Autumn (SON)"
         }
         season_str = season_map.get(season.lower(), season.upper())
-
-        # Format variable name nicely
         var_name = variable.replace('_', ' ').capitalize()
-
-        # Base title
         title = f"{season_str} Standard Deviation of {var_name}"
 
-        # Add level information
-        # Add level information
+        # Add level info to title
         if level_op == 'single_selected' and level_dim_name:
-            # Get the actual selected level value after selection with 'nearest' method
             actual_level = smoothed_data[level_dim_name].values.item()
             level_unit = smoothed_data[level_dim_name].attrs.get('units', '')
             title += f"\nLevel={actual_level} {level_unit}"
         elif level_op == 'range_selected':
             title += " (Level Mean)"
 
-        # Add time range information
+        # Add time period to title
         try:
-            # Extract directly from the data
-            start_time = data_season['time'].min().dt.strftime('%Y').item()
-            end_time = data_season['time'].max().dt.strftime('%Y').item()
-            time_str = f"\n({start_time}-{end_time})"
-            title += time_str
-        except Exception as e:
-            # Fallback to parameter-based approach if possible
+            start_time = data_season[time_name].min().dt.strftime('%Y').item()
+            end_time = data_season[time_name].max().dt.strftime('%Y').item()
+            title += f"\n({start_time}-{end_time})"
+        except Exception:
             if time_range is not None and hasattr(time_range, 'start') and hasattr(time_range, 'stop'):
                 try:
-                    time_str = f"\n({time_range.start.strftime('%Y')}-{time_range.stop.strftime('%Y')})"
-                    title += time_str
+                    title += f"\n({time_range.start.strftime('%Y')}-{time_range.stop.strftime('%Y')})"
                 except (AttributeError, TypeError):
-                    pass  # Skip if this approach fails too
+                    pass
 
         # Add smoothing info
         if was_smoothed:
@@ -769,7 +635,6 @@ class PlotsAccessor:
         except ValueError as e:
              print(f"Warning: Could not automatically set extent: {e}")
 
-        # Save plot if path is provided
         if save_plot_path is not None:
             plt.savefig(save_plot_path, bbox_inches='tight', dpi=300)
             print(f"Plot saved to: {save_plot_path}")
