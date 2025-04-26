@@ -6,8 +6,8 @@ sys.path.insert(0, os.path.abspath('../../src')) # Point Sphinx to the source co
 project = 'Climate Diagnostics Toolkit'
 copyright = '2025, Pranay Chakraborty, Adil Muhammed I. K.'
 author = 'Pranay Chakraborty, Adil Muhammed I. K.'
-release = '0.2.3'
-version = '0.2.3'
+release = '0.3.0'
+version = '0.3.0'
 
 # -- General configuration ---------------------------------------------------
 extensions = [

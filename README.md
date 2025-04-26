@@ -2,7 +2,7 @@
 
 ![Python Version](https://img.shields.io/badge/python-3.11+-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
-![Version](https://img.shields.io/badge/version-0.2.3-brightgreen.svg)
+![Version](https://img.shields.io/badge/version-0.3.0-brightgreen.svg)
 ![Status](https://img.shields.io/badge/status-alpha-orange.svg)
 [![PyPI version](https://img.shields.io/pypi/v/climate_diagnostics.svg)](https://pypi.org/project/climate_diagnostics/)
 
