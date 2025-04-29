@@ -7,9 +7,6 @@
 [![PyPI version](https://img.shields.io/pypi/v/climate_diagnostics.svg)](https://pypi.org/project/climate_diagnostics/)
 
 
-
-(NEEDS UPDATE)
-
 A Python package for analyzing and visualizing climate data from NetCDF files with a focus on time series and trend analysis, and spatial pattern visualization, integrated directly with xarray via accessors.
 
 ## Overview
@@ -48,8 +45,8 @@ pip install climate-diagnostics
 
 ### From Source
 ```bash
-git clone https://github.com/pranay-chakraborty/climate_diagnostics_toolkit.git 
-cd climate_diagnostics_toolkit
+git clone https://github.com/pranay-chakraborty/climate_diagnostics.git
+cd climate_diagnostics
 pip install -e .
 ```
 
@@ -58,7 +55,7 @@ pip install -e .
 ### Loading Data and Plotting Time Series
 ```python
 import xarray as xr
-from climate_diagnostics import accessors
+import climate_diagnostics
 
 # Load data using xarray
 ds = xr.open_dataset("path/to/climate_data.nc")
@@ -76,13 +73,13 @@ ds.climate_timeseries.plot_time_series(
 ### Analyzing Trends
 ```python
 import xarray as xr
-from climate_diagnostics import accessors
+import climate_diagnostics
 
 # Load data
 ds = xr.open_dataset("path/to/climate_data.nc")
 
 # Calculate and visualize trends with area-weighted averaging using the accessor
-results = ds.climate_trends.calculate_trend(
+results = ds.climate_trends.calculate_trends(
     variable="air",
     latitude=slice(40, 6),
     longitude=slice(60,110 ),
@@ -109,17 +106,15 @@ spatial_trends = ds.climate_trends.calculate_spatial_trends(
     frequency="M", # Assuming monthly data
     num_years=10,  # Trend per decade
     plot_map=True,
-    n_workers = 8,
     latitude = slice(40,6),
     longitude = slice(60,110)
-    
 )
 ```
 
 ### Creating Spatial Maps
 ```python
 import xarray as xr
-from climate_diagnostics import accessors
+import climate_diagnostics
 
 # Load data
 ds = xr.open_dataset("path/to/climate_data.nc")
@@ -136,12 +131,12 @@ ds.climate_plots.plot_mean(
 # Plot standard deviation over time, smoothed, over land only
 ds.climate_plots.plot_std_time(
     variable="air",
+    level=500,
     season="jjas",
     gaussian_sigma=1.5, # Apply smoothing
     land_only=True,      # Mask oceans
     latitude = slice(40,6),
-    longitude = slice(60,110),
-    levels = 500
+    longitude = slice(60,110)
 )
 ```
 
@@ -163,7 +158,7 @@ ds.climate_plots.plot_std_time(
 ### Setting up the development environment
 
 ```bash
-git clone https://github.com/pranay-chakraborty/climate_diagnostics.git 
+git clone https://github.com/pranay-chakraborty/climate_diagnostics.git
 cd climate_diagnostics
 conda env create -f environment.yml
 conda activate climate-diagnostics
@@ -184,7 +179,7 @@ pytest
 If you use Climate Diagnostics Toolkit in your research, please cite:
 
 ```
-Chakraborty, P. (2025) & Muhammed I. K., A. (2025). Climate Diagnostics Toolkit: Tools for analyzing and visualizing climate data using xarray accessors. Version 0.2.1. https://github.com/pranay-chakraborty/climate_diagnostics
+Chakraborty, P. (2025) & Muhammed I. K., A. (2025). Climate Diagnostics Toolkit: Tools for analyzing and visualizing climate data using xarray accessors. Version 0.3.0. https://github.com/pranay-chakraborty/climate_diagnostics
 ```
 
 For LaTeX users:
@@ -194,7 +189,7 @@ For LaTeX users:
   author = {Chakraborty, Pranay and Muhammed I. K., Adil},
   title = {{Climate Diagnostics Toolkit: Tools for analyzing and visualizing climate data using xarray accessors}},
   year = {2025},
-  version = {0.2.1},
+  version = {0.3.0},
   publisher = {GitHub},
   url = {https://github.com/pranay-chakraborty/climate_diagnostics},
   note = {[Computer software]}
