@@ -3,15 +3,14 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator
 from dask.diagnostics import ProgressBar
-from sklearn.linear_model import LinearRegression
 import pandas as pd
 from statsmodels.tsa.seasonal import STL
 import warnings
 from scipy import stats
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
-from dask.distributed import Client, LocalCluster 
-import os
+from dask.distributed import Client, LocalCluster
+import logging
 
 @xr.register_dataset_accessor("climate_trends")
 class TrendsAccessor:
@@ -26,155 +25,130 @@ class TrendsAccessor:
     The accessor handles common climate data formats with automatic detection of 
     coordinate names (lat, lon, time, level) for maximum compatibility across 
     different datasets and model output conventions.
-    
-    Parameters
-    ----------
-    xarray_obj : xarray.Dataset
-        The xarray Dataset this accessor is attached to.
-        
-    Attributes
-    ----------
-    _obj : xarray.Dataset
-        Reference to the attached dataset with climate variables.
-        
-    Examples
-    --------
-    >>> import xarray as xr
-    >>> from climate_diagnostics import register_accessors
-    >>> ds = xr.open_dataset("climate_data.nc")
-    >>> # Calculate global temperature trend
-    >>> results = ds.climate_trends.calculate_trend(
-    ...     variable="air",
-    ...     level=850,  # 850 hPa level
-    ...     season="annual",
-    ...     area_weighted=True,
-    ...     return_results=True
-    ... )
-    >>> # Calculate spatial trends for precipitation
-    >>> trend_map = ds.climate_trends.calculate_spatial_trends(
-    ...     variable="precip",
-    ...     season="jjas",
-    ...     num_years=10  # Trends per decade
-    ... )
-    
-    Notes
-    -----
-    This class uses dask for efficient handling of large climate datasets and
-    supports proper area-weighted averaging to account for the decreasing grid
-    cell area toward the poles.
     """
     
+    # --------------------------------------------------------------------------
+    # INITIALIZATION
+    # --------------------------------------------------------------------------
     def __init__(self, xarray_obj):
-        """
-        Initialize the climate trends accessor with the provided xarray Dataset.
-        
-        Parameters
-        ----------
-        xarray_obj : xarray.Dataset
-            The Dataset object this accessor is attached to. Should contain climate
-            data with time, latitude, and longitude dimensions.
-            
-        Notes
-        -----
-        The accessor automatically detects common coordinate naming conventions
-        (e.g., 'lat'/'latitude', 'lon'/'longitude', etc.) to ensure compatibility 
-        with datasets from different sources.
-        """
         self._obj = xarray_obj
 
-    
-
+    # --------------------------------------------------------------------------
+    # INTERNAL HELPER METHODS
+    # --------------------------------------------------------------------------
     def _get_coord_name(self, possible_names):
         """
         Find the actual coordinate name in the dataset from a list of common alternatives.
-        
-        This helper method searches for coordinate names in the dataset using a list
-        of possible naming conventions. For example, latitude might be named 'lat' or
-        'latitude' depending on the dataset conventions.
-        
+
+        This function checks for coordinate names in a case-sensitive manner first,
+        then falls back to a case-insensitive check on the lower-cased names.
+
         Parameters
         ----------
         possible_names : list of str
-            List of possible coordinate names to search for (e.g., ['lat', 'latitude'])
-            
+            A list of potential coordinate names to search for (e.g., ['lat', 'latitude']).
+
         Returns
         -------
         str or None
-            The first matching coordinate name found in the dataset, or None if no match
+            The matching coordinate name found in the dataset, or None if no match is found.
         """
         if self._obj is None: return None
         for name in possible_names:
             if name in self._obj.coords:
                 return name
+        coord_names_lower = {name.lower(): name for name in self._obj.coords}
+        for name in possible_names:
+            if name.lower() in coord_names_lower:
+                return coord_names_lower[name.lower()]
         return None
 
     def _filter_by_season(self, data_array, season='annual', time_coord_name='time'):
         """
-        Filter an xarray DataArray by meteorological season.
-        
-        Creates a subset of the data containing only values from the specified
-        meteorological season. If the season is 'annual', no filtering is applied.
-        
+        Filter an xarray DataArray for a specific meteorological season.
+
+        Supported seasons are 'annual', 'jjas', 'djf', 'mam', 'jja', 'son'.
+        It identifies the month from the time coordinate and filters the data
+        to include only the months corresponding to the specified season.
+
         Parameters
         ----------
-        data_array : xarray.DataArray
-            Input data to be filtered
-        season : str, default='annual'
-            Season selection: 
-            - 'annual': No filtering, returns all data
-            - 'djf': December, January, February (Northern Hemisphere winter)
-            - 'mam': March, April, May (Northern Hemisphere spring)
-            - 'jja': June, July, August (Northern Hemisphere summer)
-            - 'jjas': June, July, August, September (Northern Hemisphere extended summer)
-            - 'son': September, October, November (Northern Hemisphere fall/autumn)
-        time_coord_name : str, default='time'
-            Name of the time coordinate in the data array
-            
+        data_array : xr.DataArray
+            The data to be filtered, which must have a time dimension.
+        season : str, optional
+            The season to filter by. Defaults to 'annual'.
+        time_coord_name : str, optional
+            The name of the time coordinate. Defaults to 'time'.
+
         Returns
         -------
-        xarray.DataArray
-            Filtered data for the selected season
-            
+        xr.DataArray
+            The data filtered for the specified season.
+
         Raises
         ------
-        UserWarning
-            If filtering by the specified season results in no data points
+        ValueError
+            If the time coordinate cannot be processed for month extraction.
         """
-        if season.lower() == 'annual':
+        # --- Step 1: Handle annual case and prepare for filtering ---
+        season_input = season
+        season = season.lower()
+        if season == 'annual':
             return data_array
 
         if time_coord_name not in data_array.dims:
             print(f"Warning: Cannot filter by season - no '{time_coord_name}' dimension found.")
             return data_array
 
-        if 'month' not in data_array.coords:
-            if np.issubdtype(data_array[time_coord_name].dtype, np.datetime64):
-                data_array = data_array.assign_coords(month=(data_array[time_coord_name].dt.month))
-            else:
-                print(f"Warning: Cannot create 'month' coordinate - '{time_coord_name}' is not datetime type.")
-                return data_array
-
-        month_coord = data_array['month']
-        if season.lower() == 'jjas':
-            mask = month_coord.isin([6, 7, 8, 9])
-        elif season.lower() == 'djf':
-            mask = month_coord.isin([12, 1, 2])
-        elif season.lower() == 'mam':
-            mask = month_coord.isin([3, 4, 5])
-        elif season.lower() == 'jja':
-            mask = month_coord.isin([6, 7, 8])
-        elif season.lower() == 'son':
-            mask = month_coord.isin([9, 10, 11])
+        # --- Step 2: Extract month information from the time coordinate ---
+        time_da = data_array[time_coord_name]
+        if 'month' in data_array.coords and time_coord_name in data_array['month'].coords:
+             month_coord = data_array['month']
+        elif hasattr(time_da.dt, 'month'):
+            month_coord = time_da.dt.month
+        elif time_da.size > 0 and hasattr(time_da.data[0], 'month'):
+            try:
+                # Fallback for cftime objects that don't directly support .dt accessor
+                time_values = time_da.compute().data if hasattr(time_da, 'chunks') and time_da.chunks else time_da.data
+                months_list = [t.month for t in time_values]
+                month_coord = xr.DataArray(months_list, coords={time_coord_name: time_da}, dims=[time_coord_name])
+                print("Warning: Extracted months from cftime objects manually for seasonal filter.")
+            except Exception as e:
+                 raise ValueError(f"Time coordinate '{time_coord_name}' (type: {time_da.dtype}) "
+                                  f"could not be processed for month extraction for seasonal filter. Error: {e}")
         else:
-            print(f"Warning: Unknown season '{season}'. Using annual data.")
+            print(f"Warning: Cannot determine month for seasonal filtering from '{time_coord_name}' (dtype: {time_da.dtype}). Returning unfiltered data.")
+            return data_array
+        
+        # --- Step 3: Define seasons and apply the filter ---
+        season_months_map = {
+            'jjas': [6, 7, 8, 9], 
+            'djf': [12, 1, 2], 
+            'mam': [3, 4, 5], 
+            'jja': [6, 7, 8], 
+            'son': [9, 10, 11]
+        }
+        
+        selected_months = season_months_map.get(season)
+
+        if selected_months:
+            mask = month_coord.isin(selected_months)
+            filtered_data = data_array.where(mask, drop=True)
+            if time_coord_name in filtered_data.dims and filtered_data[time_coord_name].size == 0:
+                warnings.warn(f"Filtering by season '{season_input.upper()}' resulted in no data points.", UserWarning)
+            return filtered_data
+        else:
+            print(f"Warning: Unknown season '{season_input}'. Using annual data.")
             return data_array
 
-        filtered_data = data_array.where(mask, drop=True)
-        if time_coord_name in filtered_data.dims and len(filtered_data[time_coord_name]) == 0:
-            warnings.warn(f"Filtering by season '{season}' resulted in no data points.", UserWarning)
 
-        return filtered_data
+    # ==============================================================================
+    # PUBLIC TREND ANALYSIS METHODS
+    # ==============================================================================
 
+    # --------------------------------------------------------------------------
+    # A. Time Series Trend (Point or Regional Average)
+    # --------------------------------------------------------------------------
     def calculate_trend(self,
                         variable='air',
                         latitude=None,
@@ -186,311 +160,256 @@ class TrendsAccessor:
                         period=12,
                         plot=True,
                         return_results=False,
-                        save_plot_path = None
+                        save_plot_path=None
                         ):
         """
-        Calculate trends from time series using STL decomposition and linear regression.
-        
-        This method extracts a variable from the dataset, applies spatial and temporal
-        filtering, performs area-weighted averaging if requested, decomposes the time
-        series using STL to extract the trend component, and fits a linear regression 
-        to quantify the trend.
-        
+        Calculate and visualize the trend of a time series for a specified variable and region.
+
+        This method performs the following steps:
+        1. Selects the data for the given variable and spatial/level domain.
+        2. Applies a seasonal filter.
+        3. Computes a spatial average (area-weighted or simple) to get a 1D time series.
+        4. Applies Seasonal-Trend decomposition using LOESS (STL) to isolate the trend component.
+        5. Fits a linear regression to the trend component to calculate the slope, p-value, etc.
+        6. Optionally plots the STL trend and the linear fit.
+
         Parameters
         ----------
-        variable : str, default='air'
-            Variable name to analyze in the dataset
-        latitude : float, slice, or None
-            Latitude selection as point value (float) or region (slice).
-            If None, uses all latitudes.
-        longitude : float, slice, or None
-            Longitude selection as point value (float) or region (slice).
-            If None, uses all longitudes.
-        level : float, slice, or None
-            Pressure level selection (if applicable).
-            If None and level dimension exists, defaults to first level.
-        frequency : str, default='M'
-            Time frequency of data: 'M' (monthly), 'D' (daily), or 'Y' (yearly).
-            Used for proper scaling of trend rates.
-        season : str, default='annual'
-            Season to analyze: 'annual', 'jjas' (Jun-Sep), 'djf' (Dec-Feb), 'mam' (Mar-May)
-        area_weighted : bool, default=True
-            Apply cosine latitude weighting for area-representative averaging.
-            Only applicable for regional or global calculations.
-        period : int, default=12
-            Period for STL decomposition (12 for monthly data, 365 for daily data).
-            Should match the seasonal cycle in the data.
-        plot : bool, default=True
-            Generate visualization of the trend analysis
-        return_results : bool, default=False
-            Return dictionary with calculation results
-        save_plot_path : str, optional
-            Path where the plot should be saved. If None (default), the plot is not saved.
-            
+        variable : str, optional
+            Name of the variable to analyze. Defaults to 'air'.
+        latitude : float, slice, list, or None, optional
+            Latitude selection for the analysis domain. Can be a single point, a slice,
+            or a list of values. If None, the full latitude range is used.
+        longitude : float, slice, list, or None, optional
+            Longitude selection for the analysis domain.
+        level : float, slice, or None, optional
+            Vertical level selection. If a slice is provided, data is averaged over the levels.
+            If None and multiple levels exist, the first level is used by default.
+        frequency : {'Y', 'M', 'D'}, optional
+            The time frequency used to report the slope of the trend line.
+            'Y' for per year, 'M' for per month, 'D' for per day. Defaults to 'M'.
+        season : str, optional
+            Seasonal filter to apply before analysis. Supported: 'annual', 'jjas',
+            'djf', 'mam', 'jja', 'son'. Defaults to 'annual'.
+        area_weighted : bool, optional
+            If True, performs area-weighted spatial averaging using latitude weights.
+            Defaults to True. Ignored for point selections.
+        period : int, optional
+            The periodicity of the seasonal component for STL decomposition.
+            For monthly data, this is typically 12. Defaults to 12.
+        plot : bool, optional
+            If True, a plot of the trend component and its linear fit is generated.
+            Defaults to True.
+        return_results : bool, optional
+            If True, a dictionary containing the detailed results of the analysis is returned.
+            Defaults to False.
+        save_plot_path : str or None, optional
+            If provided, the path where the plot will be saved.
+
         Returns
         -------
         dict or None
-            If return_results=True, returns a dictionary containing:
-            - calculation_type: 'global', 'point', or 'region'
-            - trend_component: pandas.Series of the extracted trend
-            - regression_model: fitted LinearRegression object
-            - predicted_trend: pandas.Series of fitted trend values
-            - area_weighted: whether area weighting was applied
-            - region_details: metadata about variable, season, and level
-            - stl_period: period used for STL decomposition
-            - trend_statistics: pandas.DataFrame with regression statistics including:
-            - slope, intercept, p_value, r_value, r_squared, standard_error
-            
+            If `return_results` is True, returns a dictionary containing the analysis results,
+            including the trend component (pandas Series), the predicted trend line,
+            region details, and a DataFrame with trend statistics (slope, p-value, etc.).
+            Otherwise, returns None.
+
         Raises
         ------
         ValueError
-            If dataset not loaded, variable not found, or selection/filtering issues
-        TypeError
-            For data type conversion issues or incompatible index types
-        RuntimeError
-            For processing failures
-            
-        Notes
-        -----
-        - For global calculations (latitude=None, longitude=None), area-weighted
-          averaging is applied by default to account for decreasing grid cell area
-          towards the poles.
-        - Trend significance is assessed through the p_value in the trend_statistics.
-        - The plot includes the extracted trend component and the linear fit.
+            If the variable is not found, no time coordinate is present, or if the
+            data selection and processing result in an empty time series.
         """
+        # --- Step 1: Initial validation and coordinate name fetching ---
+        if self._obj is None: raise ValueError("Dataset not loaded.")
         if variable not in self._obj.variables: raise ValueError(f"Variable '{variable}' not found.")
 
-        # Get coordinate names
-        lat_coord = self._get_coord_name(['lat', 'latitude'])
-        lon_coord = self._get_coord_name(['lon', 'longitude'])
-        level_coord = self._get_coord_name(['level', 'lev', 'plev', 'zlev'])
-        time_coord = self._get_coord_name(['time'])
+        lat_coord_name = self._get_coord_name(['lat', 'latitude'])
+        lon_coord_name = self._get_coord_name(['lon', 'longitude'])
+        level_coord_name = self._get_coord_name(['level', 'lev', 'plev', 'zlev', 'height', 'altitude'])
+        time_coord_name = self._get_coord_name(['time', 't'])
         
-        if not all([lat_coord, lon_coord, time_coord]):
-            raise ValueError("Dataset must contain recognizable time, latitude, and longitude coordinates.")
-
-        # Initial data selection
+        if not time_coord_name:
+            raise ValueError("Dataset must contain a recognizable time coordinate.")
+        
         data_var = self._obj[variable]
-        if time_coord not in data_var.dims:
-            raise ValueError(f"Variable '{variable}' has no '{time_coord}' dimension.")
+        if time_coord_name not in data_var.dims:
+            raise ValueError(f"Variable '{variable}' has no '{time_coord_name}' dimension.")
 
-        # Determine calculation type
+        # --- Step 2: Determine calculation type and apply seasonal filter ---
         is_global = latitude is None and longitude is None
         is_point_lat = isinstance(latitude, (int, float))
         is_point_lon = isinstance(longitude, (int, float))
-        is_point = is_point_lat and is_point_lon
+        is_point = is_point_lat and is_point_lon and lat_coord_name and lon_coord_name
         
         calculation_type = 'global' if is_global else ('point' if is_point else 'region')
 
-        # Set default area weighting
-        if area_weighted is None:
-            area_weighted = calculation_type == 'global'
         if calculation_type == 'point':
             area_weighted = False
 
         print(f"Starting trend calculation: type='{calculation_type}', variable='{variable}', season='{season}', area_weighted={area_weighted}")
 
-        # Filter by season
-        data_var = self._filter_by_season(data_var, season=season, time_coord_name=time_coord)
-        if variable not in self._obj.variables: 
-            raise ValueError(f"Variable '{variable}' not found.")
-
-        # Get coordinate names
-        lat_coord = self._get_coord_name(['lat', 'latitude'])
-        lon_coord = self._get_coord_name(['lon', 'longitude'])
-        level_coord = self._get_coord_name(['level', 'lev', 'plev', 'zlev'])
-        time_coord = self._get_coord_name(['time'])
-        
-        if not all([lat_coord, lon_coord, time_coord]):
-            raise ValueError("Dataset must contain recognizable time, latitude, and longitude coordinates.")
-
-        # Initial data selection
-        data_var = self._obj[variable]
-        if time_coord not in data_var.dims:
-            raise ValueError(f"Variable '{variable}' has no '{time_coord}' dimension.")
-
-        # Determine calculation type
-        is_global = latitude is None and longitude is None
-        is_point_lat = isinstance(latitude, (int, float))
-        is_point_lon = isinstance(longitude, (int, float))
-        is_point = is_point_lat and is_point_lon
-        
-        calculation_type = 'global' if is_global else ('point' if is_point else 'region')
-
-        # Set default area weighting
-        if area_weighted is None:
-            area_weighted = calculation_type == 'global'
-        if calculation_type == 'point':
-            area_weighted = False
-
-        print(f"Starting trend calculation: type='{calculation_type}', variable='{variable}', season='{season}', area_weighted={area_weighted}")
-
-        # Filter by season
-        data_var = self._filter_by_season(data_var, season=season, time_coord_name=time_coord)
-        if len(data_var[time_coord]) == 0:
+        data_var = self._filter_by_season(data_var, season=season, time_coord_name=time_coord_name)
+        if data_var[time_coord_name].size == 0:
             raise ValueError(f"No data remains for variable '{variable}' after filtering for season '{season}'.")
 
-        # Validate coordinates before selection
-        
-        # Validate latitude coordinates
-        if latitude is not None and lat_coord in data_var.coords:
-            lat_min, lat_max = data_var[lat_coord].min().item(), data_var[lat_coord].max().item()
-            
-            # Check if latitude selection is completely outside the available range
+        # --- Step 3: Validate selection ranges against data bounds ---
+        if latitude is not None and lat_coord_name and lat_coord_name in data_var.coords:
+            lat_min, lat_max = data_var[lat_coord_name].min().item(), data_var[lat_coord_name].max().item()
             if isinstance(latitude, slice):
-                if latitude.start is not None and latitude.start > lat_max:
-                    raise ValueError(f"Requested latitude minimum {latitude.start} is greater than available maximum {lat_max}")
-                if latitude.stop is not None and latitude.stop < lat_min:
-                    raise ValueError(f"Requested latitude maximum {latitude.stop} is less than available minimum {lat_min}")
+                if latitude.start is not None and latitude.start > lat_max: raise ValueError(f"Lat min {latitude.start} > data max {lat_max}")
+                if latitude.stop is not None and latitude.stop < lat_min: raise ValueError(f"Lat max {latitude.stop} < data min {lat_min}")
             elif isinstance(latitude, (list, np.ndarray)):
-                if min(latitude) > lat_max or max(latitude) < lat_min:
-                    raise ValueError(f"Requested latitudes [{min(latitude)}, {max(latitude)}] are outside available range [{lat_min}, {lat_max}]")
-            else:  # scalar
-                if latitude < lat_min or latitude > lat_max:
-                    raise ValueError(f"Requested latitude {latitude} is outside available range [{lat_min}, {lat_max}]")
+                if min(latitude) > lat_max or max(latitude) < lat_min: raise ValueError(f"Lat list out of bounds")
+            else:
+                if latitude < lat_min or latitude > lat_max: raise ValueError(f"Lat scalar {latitude} out of bounds [{lat_min}, {lat_max}]")
         
-        # Validate longitude coordinates
-        if longitude is not None and lon_coord in data_var.coords:
-            lon_min, lon_max = data_var[lon_coord].min().item(), data_var[lon_coord].max().item()
-            
-            # Check if longitude selection is completely outside the available range
+        if longitude is not None and lon_coord_name and lon_coord_name in data_var.coords:
+            lon_min, lon_max = data_var[lon_coord_name].min().item(), data_var[lon_coord_name].max().item()
             if isinstance(longitude, slice):
-                if longitude.start is not None and longitude.start > lon_max:
-                    raise ValueError(f"Requested longitude minimum {longitude.start} is greater than available maximum {lon_max}")
-                if longitude.stop is not None and longitude.stop < lon_min:
-                    raise ValueError(f"Requested longitude maximum {longitude.stop} is less than available minimum {lon_min}")
+                if longitude.start is not None and longitude.start > lon_max: raise ValueError(f"Lon min {longitude.start} > data max {lon_max}")
+                if longitude.stop is not None and longitude.stop < lon_min: raise ValueError(f"Lon max {longitude.stop} < data min {lon_min}")
             elif isinstance(longitude, (list, np.ndarray)):
-                if min(longitude) > lon_max or max(longitude) < lon_min:
-                    raise ValueError(f"Requested longitudes [{min(longitude)}, {max(longitude)}] are outside available range [{lon_min}, {lon_max}]")
-            else:  # scalar
-                if longitude < lon_min or longitude > lon_max:
-                    raise ValueError(f"Requested longitude {longitude} is outside available range [{lon_min}, {lon_max}]")
+                if min(longitude) > lon_max or max(longitude) < lon_min: raise ValueError(f"Lon list out of bounds")
+            else:
+                if longitude < lon_min or longitude > lon_max: raise ValueError(f"Lon scalar {longitude} out of bounds [{lon_min}, {lon_max}]")
         
-        # Validate level coordinates
-        level_dim_exists = level_coord and level_coord in data_var.dims
-        if level is not None and level_dim_exists:
-            level_min, level_max = data_var[level_coord].min().item(), data_var[level_coord].max().item()
-            
+        level_dim_exists_in_var = level_coord_name and level_coord_name in data_var.dims
+        if level is not None and level_dim_exists_in_var:
+            level_min, level_max = data_var[level_coord_name].min().item(), data_var[level_coord_name].max().item()
             if isinstance(level, (slice, list, np.ndarray)):
-                # Check if completely outside range
-                if isinstance(level, slice):
-                    if level.start is not None and level.start > level_max:
-                        raise ValueError(f"Requested level minimum {level.start} is greater than available maximum {level_max}")
-                    if level.stop is not None and level.stop < level_min:
-                        raise ValueError(f"Requested level maximum {level.stop} is less than available minimum {level_min}")
-                elif min(level) > level_max or max(level) < level_min:
-                    raise ValueError(f"Requested levels [{min(level)}, {max(level)}] are outside available range [{level_min}, {level_max}]")
-            else:  # scalar
+                pass
+            else:
                 if level < level_min * 0.5 or level > level_max * 1.5:
-                    print(f"Warning: Requested level {level} is far from available range [{level_min}, {level_max}]")
+                    print(f"Warning: Requested level {level} may be far from available range [{level_min}, {level_max}]")
 
-        # Separate slice and point selectors for proper application
+        # --- Step 4: Prepare and apply selections for lat, lon, and level ---
         sel_slices = {}
         sel_points = {}
         level_selection_info = ""
-        level_dim_exists = level_coord and level_coord in data_var.dims
 
-        # Set up latitude/longitude selectors
-        if latitude is not None:
-            if isinstance(latitude, slice): sel_slices[lat_coord] = latitude
-            else: sel_points[lat_coord] = latitude
-        if longitude is not None:
-            if isinstance(longitude, slice): sel_slices[lon_coord] = longitude
-            else: sel_points[lon_coord] = longitude
+        if latitude is not None and lat_coord_name:
+            if isinstance(latitude, slice): sel_slices[lat_coord_name] = latitude
+            else: sel_points[lat_coord_name] = latitude
+        if longitude is not None and lon_coord_name:
+            if isinstance(longitude, slice): sel_slices[lon_coord_name] = longitude
+            else: sel_points[lon_coord_name] = longitude
 
-        # Handle level selection
         if level is not None:
-            if level_dim_exists:
+            if level_dim_exists_in_var:
                 level_selection_info = f"level(s)={level}"
-                if isinstance(level, slice): sel_slices[level_coord] = level
-                else: sel_points[level_coord] = level
+                if isinstance(level, slice): sel_slices[level_coord_name] = level
+                else: sel_points[level_coord_name] = level
             else:
-                print(f"Warning: Level coordinate '{level_coord}' not found. Level selection ignored.")
-        elif level_dim_exists and calculation_type != 'point':
-            default_level_val = data_var[level_coord][0].item()
-            sel_points[level_coord] = default_level_val
+                print(f"Warning: Level coordinate '{level_coord_name}' not found in var '{variable}'. Level selection ignored.")
+        elif level_dim_exists_in_var and data_var.sizes[level_coord_name] > 1:
+            # Default to first level if multiple exist and none are specified
+            default_level_val = data_var[level_coord_name][0].item()
+            sel_points[level_coord_name] = default_level_val
             level_selection_info = f"level={default_level_val} (defaulted)"
             print(f"Warning: Defaulting to first level: {default_level_val}")
 
-        # Apply spatial selections in correct order
         try:
             if sel_slices:
                 print(f"Applying slice selection: {sel_slices}")
                 data_var = data_var.sel(sel_slices)
-
             if sel_points:
                 print(f"Applying point selection with method='nearest': {sel_points}")
                 data_var = data_var.sel(sel_points, method='nearest')
         except Exception as e:
-            current_selectors = {**sel_slices, **sel_points}
-            raise ValueError(f"Error during .sel() operation with selectors {current_selectors}: {e}")
+            raise ValueError(f"Error during .sel() operation: {e}")
 
-        # Validate selection results
+        # --- Step 5: Perform spatial averaging if necessary ---
         selected_sizes = data_var.sizes
         print(f"Dimensions after selection: {selected_sizes}")
-        spatial_dims_selected = [d for d in [lat_coord, lon_coord, level_coord] if d in selected_sizes]
-        if any(selected_sizes[d] == 0 for d in spatial_dims_selected) or \
-           time_coord not in selected_sizes or selected_sizes[time_coord] == 0:
-            raise ValueError(f"Selection resulted in zero data points ({selected_sizes}). Check slice ranges.")
+        if time_coord_name not in selected_sizes or selected_sizes[time_coord_name] == 0:
+            raise ValueError(f"Selection resulted in zero time points ({selected_sizes}).")
 
-        # Spatial averaging if needed
-        dims_to_average = [d for d in [lat_coord, lon_coord] if d in selected_sizes and selected_sizes[d] > 1]
         processed_ts_da = data_var
-        region_coords = {d: data_var[d].values for d in data_var.coords if d != time_coord and d in data_var.coords}
+        dims_to_average_over = []
+        if lat_coord_name and lat_coord_name in selected_sizes and selected_sizes[lat_coord_name] > 1:
+            dims_to_average_over.append(lat_coord_name)
+        if lon_coord_name and lon_coord_name in selected_sizes and selected_sizes[lon_coord_name] > 1:
+            dims_to_average_over.append(lon_coord_name)
+        
+        # Also average over level if a slice was provided
+        if level_coord_name and level_coord_name in selected_sizes and selected_sizes[level_coord_name] > 1 and \
+           isinstance(level, slice):
+            dims_to_average_over.append(level_coord_name)
+            print(f"Including level dimension '{level_coord_name}' in averaging due to slice input.")
 
-        if dims_to_average:
-            print(f"Averaging over dimensions: {dims_to_average}")
-            if area_weighted:
-                if lat_coord not in data_var.coords:
-                    raise ValueError("Latitude coordinate needed for area weighting.")
-                weights = np.cos(np.deg2rad(data_var[lat_coord]))
+        region_coords = {d: data_var[d].values for d in data_var.coords if d != time_coord_name and d in data_var.coords}
+
+        if dims_to_average_over:
+            print(f"Averaging over dimensions: {dims_to_average_over}")
+            if area_weighted and lat_coord_name and lat_coord_name in dims_to_average_over:
+                # Weighted average
+                if lat_coord_name not in data_var.coords:
+                    raise ValueError(f"Latitude coordinate '{lat_coord_name}' needed for area weighting but not found.")
+                weights = np.cos(np.deg2rad(data_var[lat_coord_name]))
                 weights.name = "weights"
-                weights = weights.broadcast_like(data_var)
                 with ProgressBar(dt=1.0):
-                    processed_ts_da = data_var.weighted(weights).mean(dim=dims_to_average).compute()
+                    processed_ts_da = data_var.weighted(weights).mean(dim=dims_to_average_over, skipna=True).compute()
             else:
+                # Unweighted average
+                if area_weighted and not (lat_coord_name and lat_coord_name in dims_to_average_over):
+                    print("Warning: Area weighting requested but latitude dimension not available for averaging or not present.")
                 with ProgressBar(dt=1.0):
-                    processed_ts_da = data_var.mean(dim=dims_to_average).compute()
+                    processed_ts_da = data_var.mean(dim=dims_to_average_over, skipna=True).compute()
         else:
-            if calculation_type != 'point' and not dims_to_average:
-                print("Selection resulted in a single spatial point. No averaging needed.")
-                calculation_type = 'point'
-            else:
-                print("Point selection complete. No averaging needed.")
-            
+            # No averaging needed for point selections
+            print("Point selection or no spatial dimensions to average. Computing...")
             with ProgressBar(dt=1.0):
                 processed_ts_da = data_var.compute()
+            if calculation_type != 'point' and not dims_to_average_over:
+                 calculation_type = 'point'
             region_coords = {d: processed_ts_da[d].values for d in processed_ts_da.coords 
-                            if d != time_coord and d in processed_ts_da.coords}
+                            if d != time_coord_name and d in processed_ts_da.coords}
 
-        # Convert to pandas series
-        if processed_ts_da is None:
-            raise RuntimeError("Time series data not processed.")
-        if time_coord not in processed_ts_da.dims:
-            if not processed_ts_da.dims:
-                raise ValueError("Processed data became a scalar value, cannot create time series.")
+        # --- Step 6: Convert to pandas Series for STL ---
+        if processed_ts_da is None: raise RuntimeError("Time series data not processed.")
+        if time_coord_name not in processed_ts_da.dims:
+            if not processed_ts_da.dims: raise ValueError("Processed data became a scalar value.")
             raise ValueError(f"Processed data lost time dimension. Final dims: {processed_ts_da.dims}")
 
-        ts_pd = processed_ts_da.to_pandas()
+        try:
+            ts_pd = processed_ts_da.to_pandas()
+        except Exception as e:
+            # Handle cases where conversion to pandas is not straightforward
+            if processed_ts_da.ndim > 1:
+                squeezable_dims = [d for d in processed_ts_da.dims if d != time_coord_name and processed_ts_da.sizes[d] == 1]
+                if squeezable_dims:
+                    processed_ts_da_squeezed = processed_ts_da.squeeze(dim=squeezable_dims, drop=True)
+                    if processed_ts_da_squeezed.ndim == 1:
+                        ts_pd = processed_ts_da_squeezed.to_pandas()
+                    else:
+                        raise ValueError(f"Data for pandas conversion has >1 non-squeezable dimension after spatial processing: {processed_ts_da.dims}. Error: {e}")
+                else:
+                    raise ValueError(f"Data for pandas conversion has >1 dimension: {processed_ts_da.dims}. Error: {e}")
+            elif processed_ts_da.ndim == 1:
+                 try: # Fallback for cftime index
+                    ts_pd = pd.Series(processed_ts_da.data, index=pd.to_datetime(processed_ts_da[time_coord_name].data))
+                 except Exception as e_pd_series:
+                     raise TypeError(f"Could not convert 1D DataArray to pandas Series. Error: {e_pd_series}")
+            else:
+                 raise TypeError(f"Data for pandas conversion is not a 1D time series. Dims: {processed_ts_da.dims}. Error: {e}")
 
-         # Handle different pandas output types
         if not isinstance(ts_pd, pd.Series):
             if isinstance(ts_pd, pd.DataFrame):
                 if len(ts_pd.columns) == 1:
-                    warnings.warn(f"Conversion resulted in DataFrame; extracting single column '{ts_pd.columns[0]}'.")
                     ts_pd = ts_pd.iloc[:, 0]
                 else:
-                    warnings.warn(f"Conversion resulted in DataFrame with multiple columns ({len(ts_pd.columns)}); using mean across columns.")
+                    warnings.warn(f"Pandas conversion resulted in DataFrame with {len(ts_pd.columns)} columns; using mean across columns.")
                     ts_pd = ts_pd.mean(axis=1)
             elif np.isscalar(ts_pd):
-                raise TypeError(f"Expected pandas Series, but got a scalar ({ts_pd}).")
+                raise TypeError(f"Expected pandas Series, but got a scalar ({ts_pd}). Data might be too aggregated.")
             else:
                 raise TypeError(f"Expected pandas Series, but got {type(ts_pd)}")
 
+        # --- Step 7: Apply STL decomposition to isolate the trend ---
         if ts_pd.isnull().all():
             raise ValueError(f"Time series is all NaNs after selection/averaging.")
 
-        # Clean time series and check length for STL
         original_index = ts_pd.index
         ts_pd_clean = ts_pd.dropna()
 
@@ -499,171 +418,161 @@ class TrendsAccessor:
             
         min_stl_len = 2 * period
         if len(ts_pd_clean) < min_stl_len:
-            raise ValueError(f"Time series length ({len(ts_pd_clean)}) is less than required minimum ({min_stl_len}).")
+            raise ValueError(f"Time series length ({len(ts_pd_clean)}) for STL is less than required minimum ({min_stl_len}). Need at least 2*period.")
 
-        # Apply STL decomposition
         print("Applying STL decomposition...")
-        try:
-            stl_result = STL(ts_pd_clean, period=period, robust=True).fit()
-            trend_component = stl_result.trend.reindex(original_index)
-        except Exception as e:
-            print(f"Error during STL decomposition: {e}")
-            raise
+        stl_result = STL(ts_pd_clean, period=period, robust=True).fit()
+        trend_component = stl_result.trend.reindex(original_index)
 
-        # Linear regression on trend component
+        # --- Step 8: Perform linear regression on the trend component ---
         print("Performing linear regression...")
         trend_component_clean = trend_component.dropna()
         if trend_component_clean.empty:
-            raise ValueError("Trend component is all NaNs after STL.")
+            raise ValueError("Trend component is all NaNs after STL and dropna.")
 
-        try:
-            # Convert index to numerical format for regression
-            if pd.api.types.is_datetime64_any_dtype(trend_component_clean.index):
-                first_date = trend_component_clean.index.min()
-                
-                
-                # Set appropriate time unit based on frequency parameter
-                if frequency == 'M':
-                    scale = 24*3600*30  # seconds in ~month
-                    time_unit = "months"
-                    to_decade = 120      # months in a decade
-                elif frequency == 'D':
-                    scale = 24*3600      # seconds in day
-                    time_unit = "days"
-                    to_decade = 3652.5   # days in decade
-                elif frequency == 'Y':
-                    scale = 24*3600*365.25  # seconds in year
-                    time_unit = "years"
-                    to_decade = 10       # years in decade
-                else:
-                    # Default to years for climate data
-                    scale = 24*3600*365.25
-                    time_unit = "years"
-                    to_decade = 10
-                    print(f"Warning: Unknown frequency '{frequency}', defaulting to years")
-                
-                # Convert to the specified time units
-                dates_numeric = ((trend_component_clean.index - first_date).total_seconds() / scale).values.reshape(-1, 1)
-                
-                x_vals = dates_numeric.flatten()
-                y_vals = trend_component_clean.values
-                slope, intercept, r_value, p_value, slope_std_error = stats.linregress(x_vals, y_vals)
-                
-      
-                
-                
-                
-            elif pd.api.types.is_numeric_dtype(trend_component_clean.index):
-                dates_numeric = trend_component_clean.index.values.reshape(-1, 1)
-                time_unit = "units"
-                to_decade = None
-                x_vals = dates_numeric.flatten()
-                y_vals = trend_component_clean.values
-                slope, intercept, r_value, p_value, slope_std_error = stats.linregress(x_vals, y_vals)
-                
-                
+        if pd.api.types.is_datetime64_any_dtype(trend_component_clean.index):
+            # Calculate time in numeric units for regression
+            first_date = trend_component_clean.index.min()
+            if frequency.upper() == 'M':
+                scale_seconds = 24 * 3600 * (365.25 / 12)
+                time_unit_for_slope = "month"
+            elif frequency.upper() == 'D':
+                scale_seconds = 24 * 3600
+                time_unit_for_slope = "day"
+            elif frequency.upper() == 'Y':
+                scale_seconds = 24 * 3600 * 365.25
+                time_unit_for_slope = "year"
             else:
-                raise TypeError(f"Trend index type ({trend_component_clean.index.dtype}) not recognized.")
-
-            y_train = trend_component_clean.values
-            reg = LinearRegression()
-            reg.fit(dates_numeric, y_train)
-            y_pred_values = reg.predict(dates_numeric)
-            y_pred_series = pd.Series(y_pred_values, index=trend_component_clean.index).reindex(original_index)
+                scale_seconds = 24 * 3600 * 365.25
+                time_unit_for_slope = "year"
+                print(f"Warning: Unknown frequency '{frequency}', defaulting to years for slope calculation.")
             
-        except Exception as e:
-            print(f"Error during linear regression: {e}")
-            raise
+            x_numeric_for_regression = ((trend_component_clean.index - first_date).total_seconds() / scale_seconds).values
         
+        elif pd.api.types.is_numeric_dtype(trend_component_clean.index):
+            x_numeric_for_regression = trend_component_clean.index.values
+            time_unit_for_slope = "index_unit"
+        else:
+            raise TypeError(f"Trend index type ({trend_component_clean.index.dtype}) not recognized for regression.")
+
+        if len(x_numeric_for_regression) < 2:
+             raise ValueError("Not enough data points in the cleaned trend component for linear regression.")
+
+        y_values_for_regression = trend_component_clean.values
         
+        slope, intercept, r_value, p_value, slope_std_error = stats.linregress(x_numeric_for_regression, y_values_for_regression)
+        
+        y_pred_values_on_clean_index = intercept + slope * x_numeric_for_regression
+        predicted_trend_series = pd.Series(y_pred_values_on_clean_index, index=trend_component_clean.index).reindex(original_index)
         
         trend_stats_df = pd.DataFrame({
-        'statistic': ['slope', 'intercept', 'p_value', 'r_value', 'r_squared','standard_error'],
-        'value': [slope, intercept, p_value, r_value, r_value**2,slope_std_error]
-         })
+            'statistic': ['slope', 'intercept', 'p_value', 'r_value', 'r_squared', 'standard_error_slope'],
+            'value': [slope, intercept, p_value, r_value, r_value**2, slope_std_error]
+        })
          
-        # Plotting
+        # --- Step 9: Generate plot if requested ---
         if plot:
             print("Generating plot...")
             plt.figure(figsize=(16, 10), dpi=100)
+            
+            # Plot the raw STL trend and the linear fit
             plt.scatter(trend_component.index, trend_component.values, color='blue', alpha=0.5, s=10, 
                        label='STL Trend Component')
-            plt.plot(y_pred_series.index, y_pred_series.values, color='red', linewidth=2, 
-                    label='Linear Trend Fit')
-
-            # Dynamic title generation
-            title = f"Trend: {variable.capitalize()}"
-            units = processed_ts_da.attrs.get('units', '')
-            ylabel = f'{variable.capitalize()} Trend' + (f' ({units})' if units else '')
-
-            coord_strs = []
             
-            def format_coord(coord_name, coords_dict):
-                if coord_name in coords_dict:
-                    vals = np.atleast_1d(coords_dict[coord_name])
+            units_label = processed_ts_da.attrs.get('units', '')
+            slope_label = f'Linear Fit (Slope: {slope:.3e} {units_label}/{time_unit_for_slope})'
+            plt.plot(predicted_trend_series.index, predicted_trend_series.values, color='red', linewidth=2, 
+                    label=slope_label)
+
+            # Create a descriptive title
+            title_parts = [f"Trend: {variable.capitalize()}"]
+            ylabel = f'{variable.capitalize()} Trend' + (f' ({units_label})' if units_label else '')
+            
+            coord_strs = []
+            def format_coord_for_title(coord_val_name, actual_coord_name, coords_dict_from_data):
+                if actual_coord_name and actual_coord_name in coords_dict_from_data:
+                    vals = np.atleast_1d(coords_dict_from_data[actual_coord_name])
                     if len(vals) == 0: return None
+                    
                     name_map = {'lat': 'Lat', 'latitude': 'Lat', 'lon': 'Lon', 'longitude': 'Lon', 
-                               'level': 'Level', 'lev': 'Level', 'plev': 'Level'}
-                    prefix = name_map.get(coord_name, coord_name.capitalize())
-                    if len(vals) > 1:
-                        return f"{prefix}=[{np.nanmin(vals):.2f}:{np.nanmax(vals):.2f}]"
-                    else:
-                        scalar_val = vals.item() if vals.ndim == 0 or vals.size == 1 else vals[0]
-                        return f"{prefix}={scalar_val:.2f}"
+                                'level': 'Level', 'lev': 'Level', 'plev': 'Level', 'height':'Height', 'altitude':'Alt'}
+                    prefix = name_map.get(actual_coord_name, actual_coord_name.capitalize())
+                    
+                    original_request = None
+                    if coord_val_name == 'latitude': original_request = latitude
+                    elif coord_val_name == 'longitude': original_request = longitude
+                    elif coord_val_name == 'level': original_request = level
+
+                    if isinstance(original_request, (int,float,np.number)):
+                         return f"{prefix}={original_request:.2f} (nearest: {vals.item():.2f})"
+                    elif len(vals) > 1 and not np.all(np.isnan(vals)):
+                        return f"{prefix}=[{np.nanmin(vals):.2f} to {np.nanmax(vals):.2f}]"
+                    elif len(vals) == 1 and not np.isnan(vals.item()):
+                        return f"{prefix}={vals.item():.2f}"
                 return None
 
-            lat_str = format_coord(lat_coord, region_coords)
-            lon_str = format_coord(lon_coord, region_coords)
-            level_str = format_coord(level_coord, region_coords)
+            lat_str = format_coord_for_title('latitude', lat_coord_name, region_coords)
+            lon_str = format_coord_for_title('longitude', lon_coord_name, region_coords)
+            level_str_from_data = format_coord_for_title('level', level_coord_name, region_coords)
 
-            # Title components based on calculation type
             if calculation_type == 'point':
-                title += f" (Point Analysis)"
+                title_parts.append("(Point Analysis)")
                 if lat_str: coord_strs.append(lat_str)
                 if lon_str: coord_strs.append(lon_str)
-                if level_str: coord_strs.append(level_str)
+                if level_str_from_data: coord_strs.append(level_str_from_data)
             elif calculation_type == 'region' or calculation_type == 'global':
-                avg_str = f"{'Weighted' if area_weighted else 'Unweighted'} Mean" if dims_to_average else "Selection"
-                title += f" ({'Global' if is_global else 'Regional'} {avg_str})"
+                avg_str_suffix = "Mean" if dims_to_average_over else "Selection"
+                avg_str_prefix = "Weighted " if area_weighted and lat_coord_name in dims_to_average_over else ""
+                title_parts.append(f"({'Global' if is_global else 'Regional'} {avg_str_prefix}{avg_str_suffix})")
                 if lat_str: coord_strs.append(lat_str)
                 if lon_str: coord_strs.append(lon_str)
-                if level_str: coord_strs.append(level_str)
-            else:
-                title += " (Unknown Type)"
-
+                if level_str_from_data: coord_strs.append(level_str_from_data)
+            
             if season.lower() != 'annual': coord_strs.append(f"Season={season.upper()}")
-            title += "\n" + ", ".join(filter(None, coord_strs))
+            
+            full_title = title_parts[0]
+            if len(title_parts) > 1: full_title += f" {title_parts[1]}"
+            if coord_strs: full_title += "\n" + ", ".join(filter(None, coord_strs))
+            full_title += "\n(STL Trend + Linear Regression)"
 
-            plt.title(title + "\n(STL Trend + Linear Regression)", fontsize=14)
+            plt.title(full_title, fontsize=14)
             plt.xlabel('Time', fontsize=14)
             plt.ylabel(ylabel, fontsize=14)
             plt.legend(fontsize=12)
             plt.grid(True, linestyle='--', alpha=0.7)
             plt.xticks(rotation=45)
             ax = plt.gca()
-            ax.xaxis.set_major_locator(MaxNLocator(10))
+            try:
+                ax.xaxis.set_major_locator(MaxNLocator(nbins=10, prune='both'))
+            except TypeError:
+                print("Warning: Could not set major locator for x-axis due to index type.")
+
             plt.tight_layout()
             if save_plot_path is not None:
                 plt.savefig(save_plot_path, bbox_inches='tight', dpi=300)
                 print(f"Plot saved to: {save_plot_path}")
             plt.show()
 
-        # Return results
+        # --- Step 10: Return detailed results if requested ---
         if return_results:
             results = {
                 'calculation_type': calculation_type,
                 'trend_component': trend_component,
-                'regression_model': reg,
-                'predicted_trend': y_pred_series,
+                'predicted_trend_line': predicted_trend_series,
                 'area_weighted': area_weighted,
-                'region_details': {'variable': variable, 'season': season, 'level_info': level_selection_info},
+                'region_details': {'variable': variable, 'season': season, 
+                                   'level_info': level_selection_info,
+                                   'actual_level_from_data': region_coords.get(level_coord_name, "N/A")},
                 'stl_period': period,
-                'trend_statistics' : trend_stats_df
+                'trend_statistics': trend_stats_df,
+                'time_unit_of_slope': time_unit_for_slope
             }
             return results
-        else:
-            return None
+        return None
         
+    # --------------------------------------------------------------------------
+    # B. Spatial Trend Analysis (Pixel-by-pixel)
+    # --------------------------------------------------------------------------
     def calculate_spatial_trends(self,
                            variable='air',
                            latitude=slice(None, None),
@@ -671,8 +580,7 @@ class TrendsAccessor:
                            time_range=slice(None, None),
                            level=None,
                            season='annual',
-                           frequency='M',  # Frequency parameter
-                           num_years=1,    # New parameter for time period
+                           num_years=1, 
                            n_workers=4,
                            robust_stl=True,
                            period=12,
@@ -681,349 +589,286 @@ class TrendsAccessor:
                            save_plot_path=None,
                            cmap = 'coolwarm'):
         """
-        Calculate and visualize spatial trends using STL decomposition for each grid point.
+        Calculate and visualize spatial trends across a geographic domain.
 
-        This method computes trends at each grid point within the specified region using 
-        Seasonal-Trend decomposition by LOESS (STL) and parallelizes the computation with Dask.
-        The result is a spatial map of trends (e.g., °C per year, decade, etc.).
+        This method computes the trend at each grid point over a specified time period
+        and spatial domain. It leverages Dask for parallel processing to efficiently
+        handle large datasets. The trend is calculated by applying STL decomposition
+        and linear regression to the time series of each grid cell.
+        
+        The trend is calculated robustly by performing a linear regression against
+        time (converted to fractional years), making the calculation independent
+        of the data's native time frequency.
 
         Parameters
         ----------
-        variable : str, default='air'
-            Variable name to analyze trends for
+        variable : str, optional
+            Name of the variable for which to calculate trends. Defaults to 'air'.
         latitude : slice, optional
-            Latitude slice for region selection. Default is all latitudes.
+            A slice defining the latitude range for the analysis. Defaults to the full range.
         longitude : slice, optional
-            Longitude slice for region selection. Default is all longitudes.
+            A slice defining the longitude range for the analysis. Defaults to the full range.
         time_range : slice, optional
-            Time slice for analysis period. Default is all times.
-        level : float, int, or None, optional
-            Vertical level selection. If None and multiple levels exist, defaults to first level.
-        season : str, default='annual'
-            Season to analyze: 'annual', 'jjas' (Jun-Sep), 'djf' (Dec-Feb), 'mam' (Mar-May), etc.
-        frequency : str, default='M'
-            Time frequency of data: 'M' (monthly), 'D' (daily), or 'Y' (yearly).
-            Used for proper scaling of trend rates.
-        num_years : int, default=1
-            Number of years over which to express the trend (e.g., 1=per year, 10=per decade).
-        n_workers : int, default=4
-            Number of Dask workers for parallel computation
-        robust_stl : bool, default=True
-            Use robust STL fitting to reduce impact of outliers
-        period : int, default=12
-            Period for STL decomposition (12 for monthly data, 365 for daily data)
-        plot_map : bool, default=True
-            Whether to generate and show the trend map plot
-        land_only : bool, default=False
-            If True, mask out ocean areas to show land-only data
-        save_plot_path : str, optional
-            Path to save the plot image. If None, plot is shown but not saved.
+            A slice defining the time period for the trend analysis. Defaults to the full range.
+        level : float or None, optional
+            A single vertical level to select for the analysis. If None and multiple levels
+            exist, the first level is used by default.
+        season : str, optional
+            Seasonal filter to apply before analysis. Defaults to 'annual'.
+        num_years : int, optional
+            The number of years over which the trend should be reported (e.g., 1 for
+            trend per year, 10 for trend per decade). Defaults to 1.
+        n_workers : int, optional
+            The number of Dask workers to use for parallel computation. Defaults to 4.
+        robust_stl : bool, optional
+            If True, use a robust version of the STL algorithm, which is less sensitive
+            to outliers. Defaults to True.
+        period : int, optional
+            The periodicity of the seasonal component for STL. Defaults to 12.
+        plot_map : bool, optional
+            If True, plots the resulting spatial trend map. Defaults to True.
+        land_only : bool, optional
+            If True, the output map will mask ocean areas. Defaults to False.
+        save_plot_path : str or None, optional
+            Path to save the output trend map plot.
         cmap : str, optional
-            cmap for the contour plots, defaults to 'coolwarm'
+            The colormap to use for the trend map plot. Defaults to 'coolwarm'.
 
         Returns
         -------
-        xarray.DataArray
-            DataArray of computed trends (in units per specified time period).
-            Return value includes lat/lon coordinates and appropriate metadata.
+        xr.DataArray
+            A DataArray containing the calculated trend values for each grid point,
+            typically in units of [variable_units / num_years].
 
         Raises
         ------
         ValueError
-            If dataset is not loaded, variable not found, insufficient data points, 
-            or other validation errors.
-            
-        Notes
-        -----
-        - This method is computationally intensive but efficiently parallelized using Dask.
-        - For each grid point, STL decomposition extracts the trend component before 
-          computing the linear trend slope.
-        - Trends are automatically scaled according to the frequency parameter and num_years
-          value for consistency (e.g., calculating decadal trends from monthly data).
-        - The resulting visualization includes statistical significance masking, appropriate
-          map projections, and comprehensive metadata.
+            If essential coordinates (time, lat, lon) are not found, or if the
+            data selection results in insufficient data for trend calculation.
         """
         
+        # --- Step 1: Initial validation and coordinate name fetching ---
         if self._obj is None:
             raise ValueError("Dataset not loaded.")
         if variable not in self._obj.variables:
             raise ValueError(f"Variable '{variable}' not found.")
 
-        # Format the time period string for labels
-        if num_years == 1:
-            period_str = "year"
-        elif num_years == 10:
-            period_str = "decade"
-        else:
-            period_str = f"{num_years} years"
+        if num_years == 1: period_str_label = "year"
+        elif num_years == 10: period_str_label = "decade"
+        else: period_str_label = f"{num_years} years"
 
-        # Get coordinate names
-        lat_coord = self._get_coord_name(['lat', 'latitude'])
-        lon_coord = self._get_coord_name(['lon', 'longitude'])
-        level_coord = self._get_coord_name(['level', 'lev', 'plev', 'zlev'])
-        time_coord = self._get_coord_name(['time'])
+        lat_coord_name = self._get_coord_name(['lat', 'latitude'])
+        lon_coord_name = self._get_coord_name(['lon', 'longitude'])
+        level_coord_name = self._get_coord_name(['level', 'lev', 'plev', 'zlev', 'height', 'altitude'])
+        time_coord_name = self._get_coord_name(['time', 't'])
         
-        if not all([lat_coord, lon_coord, time_coord]):
-            raise ValueError("Dataset must contain recognizable time, latitude, and longitude coordinates.")
+        if not all([time_coord_name, lat_coord_name, lon_coord_name]):
+            raise ValueError("Dataset must contain recognizable time, latitude, and longitude coordinates for spatial trends.")
 
-        # Validate coordinates before Dask setup
-        data_var = self._obj[variable]
+        # --- Step 2: Validate input selection ranges ---
+        data_var_pre_dask = self._obj[variable]
         
-        # Validate latitude coordinates
-        if lat_coord in data_var.coords and not isinstance(latitude, slice) or (
-                isinstance(latitude, slice) and (latitude.start is not None or latitude.stop is not None)):
-            lat_min, lat_max = data_var[lat_coord].min().item(), data_var[lat_coord].max().item()
-            
-            # Check if latitude selection is completely outside the available range
+        if lat_coord_name in data_var_pre_dask.coords and not isinstance(latitude, slice) or \
+           (isinstance(latitude, slice) and (latitude.start is not None or latitude.stop is not None)):
+            lat_min, lat_max = data_var_pre_dask[lat_coord_name].min().item(), data_var_pre_dask[lat_coord_name].max().item()
             if isinstance(latitude, slice):
-                if latitude.start is not None and latitude.start > lat_max:
-                    raise ValueError(f"Requested latitude minimum {latitude.start} is greater than available maximum {lat_max}")
-                if latitude.stop is not None and latitude.stop < lat_min:
-                    raise ValueError(f"Requested latitude maximum {latitude.stop} is less than available minimum {lat_min}")
-            elif isinstance(latitude, (list, np.ndarray)):
-                if min(latitude) > lat_max or max(latitude) < lat_min:
-                    raise ValueError(f"Requested latitudes [{min(latitude)}, {max(latitude)}] are outside available range [{lat_min}, {lat_max}]")
-            else:  # scalar
-                if latitude < lat_min or latitude > lat_max:
-                    raise ValueError(f"Requested latitude {latitude} is outside available range [{lat_min}, {lat_max}]")
+                if latitude.start is not None and latitude.start > lat_max: raise ValueError(f"Lat min {latitude.start} > data max {lat_max}")
+                if latitude.stop is not None and latitude.stop < lat_min: raise ValueError(f"Lat max {latitude.stop} < data min {lat_min}")
         
-        # Validate longitude coordinates
-        if lon_coord in data_var.coords and not isinstance(longitude, slice) or (
-                isinstance(longitude, slice) and (longitude.start is not None or longitude.stop is not None)):
-            lon_min, lon_max = data_var[lon_coord].min().item(), data_var[lon_coord].max().item()
-            
-            # Check if longitude selection is completely outside the available range
+        if lon_coord_name in data_var_pre_dask.coords and not isinstance(longitude, slice) or \
+           (isinstance(longitude, slice) and (longitude.start is not None or longitude.stop is not None)):
+            lon_min, lon_max = data_var_pre_dask[lon_coord_name].min().item(), data_var_pre_dask[lon_coord_name].max().item()
             if isinstance(longitude, slice):
-                if longitude.start is not None and longitude.start > lon_max:
-                    raise ValueError(f"Requested longitude minimum {longitude.start} is greater than available maximum {lon_max}")
-                if longitude.stop is not None and longitude.stop < lon_min:
-                    raise ValueError(f"Requested longitude maximum {longitude.stop} is less than available minimum {lon_min}")
-            elif isinstance(longitude, (list, np.ndarray)):
-                if min(longitude) > lon_max or max(longitude) < lon_min:
-                    raise ValueError(f"Requested longitudes [{min(longitude)}, {max(longitude)}] are outside available range [{lon_min}, {lon_max}]")
-            else:  # scalar
-                if longitude < lon_min or longitude > lon_max:
-                    raise ValueError(f"Requested longitude {longitude} is outside available range [{lon_min}, {lon_max}]")
-        
-        # Validate time range
-        if time_range is not None and time_coord in data_var.dims:
-            if time_range != slice(None, None) and not isinstance(time_range, slice):
-                raise TypeError(f"time_range must be a slice, got {type(time_range)}")
-                
-            if isinstance(time_range, slice) and (time_range.start is not None or time_range.stop is not None):
-                try:
-                    time_min, time_max = data_var[time_coord].min().values, data_var[time_coord].max().values
-                    
-                    # Check if time selection is completely outside the available range
-                    if time_range.start is not None:
-                        if np.datetime64(time_range.start) > time_max:
-                            raise ValueError(f"Requested start time {time_range.start} is after available maximum {time_max}")
-                    if time_range.stop is not None:
-                        if np.datetime64(time_range.stop) < time_min:
-                            raise ValueError(f"Requested end time {time_range.stop} is before available minimum {time_min}")
-                except (TypeError, ValueError) as e:
-                    # If we can't compare the times, proceed and let xarray handle it
-                    print(f"Warning: Could not validate time range: {e}")
-        
-        # Validate level if provided
-        if level is not None and level_coord in data_var.dims:
-            level_min, level_max = data_var[level_coord].min().item(), data_var[level_coord].max().item()
-            
-            if isinstance(level, (int, float)):
-                if level < level_min * 0.5 or level > level_max * 1.5:
-                    print(f"Warning: Requested level {level} is far from available range [{level_min}, {level_max}]")
-                elif level < level_min or level > level_max:
-                    raise ValueError(f"Requested level {level} is outside available range [{level_min}, {level_max}]")
+                if longitude.start is not None and longitude.start > lon_max: raise ValueError(f"Lon min {longitude.start} > data max {lon_max}")
+                if longitude.stop is not None and longitude.stop < lon_min: raise ValueError(f"Lon max {longitude.stop} < data min {lon_min}")
 
-        # --- Dask Client Setup ---
+        if time_range is not None and time_coord_name in data_var_pre_dask.dims:
+            if not isinstance(time_range, slice): raise TypeError(f"time_range must be a slice, got {type(time_range)}")
+            if time_range.start is not None or time_range.stop is not None:
+                try:
+                    time_min_val, time_max_val = np.datetime64(data_var_pre_dask[time_coord_name].min().values), np.datetime64(data_var_pre_dask[time_coord_name].max().values)
+                    if time_range.start is not None and np.datetime64(time_range.start) > time_max_val: raise ValueError(f"Start time > data max")
+                    if time_range.stop is not None and np.datetime64(time_range.stop) < time_min_val: raise ValueError(f"End time < data min")
+                except Exception as e: print(f"Warning: Could not fully validate time range: {e}")
+        
+        level_dim_exists_in_var = level_coord_name and level_coord_name in data_var_pre_dask.dims
+        if level is not None and level_dim_exists_in_var:
+            level_min_val, level_max_val = data_var_pre_dask[level_coord_name].min().item(), data_var_pre_dask[level_coord_name].max().item()
+            if isinstance(level, (int, float)):
+                if level < level_min_val * 0.5 or level > level_max_val * 1.5: print(f"Warning: Level {level} far from range [{level_min_val}-{level_max_val}]")
+            else: raise TypeError(f"Level for spatial trends should be scalar, got {type(level)}")
+
+        # --- Step 3: Set up and start Dask client for parallel processing ---
+        client = None
+        cluster = None
         try:
-            cluster = LocalCluster(n_workers=n_workers, threads_per_worker=1)
+            cluster = LocalCluster(n_workers=n_workers, threads_per_worker=1, silence_logs=logging.WARNING)
             client = Client(cluster)
-            print(f"Dask client started: {client.dashboard_link}")
+            print(f"Dask client started for spatial trends: {client.dashboard_link}")
             
-            # --- Data Selection and Seasonal Filtering ---
+            # --- Step 4: Select, filter, and prepare the data ---
             data_var = self._obj[variable]
             
-            # Apply time range selection if provided
-            if time_range is not None:
-                data_var = data_var.sel(time=time_range)
+            if time_range is not None: data_var = data_var.sel({time_coord_name: time_range})
             
-            # Handle level selection
-            level_selection_info = ""
-            if level_coord in data_var.dims:
-                if level is None:
-                    # Default to first level
-                    level = data_var[level_coord].values[0]
-                    print(f"Defaulting to first level: {level}")
-                    level_selection_info = f"Level={level} (defaulted)"
+            level_selection_info_title = ""
+            if level_dim_exists_in_var:
+                if level is None and data_var.sizes.get(level_coord_name, 1) > 1:
+                    level = data_var[level_coord_name].values[0]
+                    print(f"Defaulting to first level for spatial trends: {level}")
+                    level_selection_info_title = f"Level={level} (defaulted)"
                 
-                data_var = data_var.sel({level_coord: level}, method='nearest')
-                level_selection_info = f"Level={data_var[level_coord].values.item()}"
-                print(f"Selected level: {data_var[level_coord].values.item()}")
+                if level is not None:
+                    data_var = data_var.sel({level_coord_name: level}, method='nearest')
+                    actual_level_val = data_var[level_coord_name].item()
+                    level_selection_info_title = f"Level={actual_level_val}"
+                    print(f"Selected level for spatial trends: {actual_level_val}")
             
-            # Apply seasonal filtering
-            data_var = self._filter_by_season(data_var, season=season, time_coord_name=time_coord)
-            if len(data_var[time_coord]) < 2 * period:
-                raise ValueError(f"Insufficient time points ({len(data_var[time_coord])}) after filtering for season '{season}'. Need at least {2 * period}.")
+            data_var = self._filter_by_season(data_var, season=season, time_coord_name=time_coord_name)
+            if data_var[time_coord_name].size < 2 * period:
+                raise ValueError(f"Insufficient time points ({data_var[time_coord_name].size}) after filtering for season '{season}'. Need at least {2 * period}.")
             
-            # Apply spatial selection
-            data_var = data_var.sel({lat_coord: latitude, lon_coord: longitude})
+            data_var = data_var.sel({lat_coord_name: latitude, lon_coord_name: longitude})
             
-            print(f"Data selected: {data_var.sizes}")
+            print(f"Data selected for spatial trends: {data_var.sizes}")
             
-            # --- Trend Calculation Function ---
-            def apply_stl_slope(da):
-                if hasattr(da, 'values'):
-                    values = da.values
-                else:
-                    values = da # Assume numpy array if not xarray
+            # --- Step 5: Define the function to calculate trend for a single grid cell ---
+            def apply_stl_slope_spatial(da_1d_time_series, time_coord_array):
+                values = np.asarray(da_1d_time_series).squeeze()
+                time_coords = pd.to_datetime(np.asarray(time_coord_array).squeeze())
 
-                values = np.asarray(values).squeeze()
-
-                # Check for sufficient data and NaNs before STL
-                min_periods = 2 * period
-                if values.ndim == 0 or len(values) < min_periods or np.isnan(values).all():
+                # a. Check for sufficient valid data
+                min_pts_for_stl = 2 * period
+                if values.ndim == 0 or len(values) < min_pts_for_stl or np.isnan(values).all():
                     return np.nan
-                if np.isnan(values).any():
-                    if np.sum(~np.isnan(values)) < min_periods:
-                        return np.nan
+                
+                valid_mask = ~np.isnan(values)
+                num_valid_pts = np.sum(valid_mask)
+                if num_valid_pts < min_pts_for_stl:
+                    return np.nan
+                
+                ts_for_stl = pd.Series(values[valid_mask], index=time_coords[valid_mask])
 
                 try:
-                    # Apply STL
-                    stl_result = STL(values, period=period, robust=robust_stl).fit()
+                    # b. Apply STL decomposition
+                    stl_result = STL(ts_for_stl, period=period, robust=robust_stl,
+                                     low_pass_jump=period//2,
+                                     trend_jump=period//2,
+                                     seasonal_jump=period//2
+                                    ).fit(iter=2)
                     trend = stl_result.trend
 
-                    # Check trend for NaNs
-                    if np.isnan(trend).all():
-                        return np.nan
+                    if trend.isnull().all(): return np.nan
 
-                    # Fit linear trend only to non-NaN trend values
-                    valid_indices = ~np.isnan(trend)
-                    if np.sum(valid_indices) < 2:
-                        return np.nan
-
-                    x = np.arange(len(trend))
-                    slope, _ = np.polyfit(x[valid_indices], trend[valid_indices], 1)
-
-                    # Use the provided frequency parameter instead of detection
-                    if frequency.upper() == 'M':
-                        # Monthly data - multiply by 12 (months per year)
-                        slope_per_year = slope * 12
-                    elif frequency.upper() == 'D':
-                        # Daily data - multiply by 365.25 (days per year)
-                        slope_per_year = slope * 365.25
-                    elif frequency.upper() == 'Y' or frequency.upper() == 'A':
-                        # Yearly data - keep as is
-                        slope_per_year = slope
-                    else:
-                        # Default for other frequencies (assume monthly)
-                        slope_per_year = slope * 12
-                        print(f"Using default conversion for frequency '{frequency}'. Assuming monthly data.")
+                    # c. Perform linear regression on the trend component
+                    trend_clean = trend.dropna()
+                    if len(trend_clean) < 2: return np.nan
                     
-                    # Multiply by num_years to get trend over specified period
-                    slope_per_period = slope_per_year * num_years
+                    first_date = trend_clean.index.min()
+                    scale_seconds_in_year = 24 * 3600 * 365.25
                     
-                    return slope_per_period
+                    x_numeric_for_regression = ((trend_clean.index - first_date).total_seconds() / scale_seconds_in_year).values
+                    y_values_for_regression = trend_clean.values
+                    
+                    slope_per_year, _, _, _, _ = stats.linregress(x_numeric_for_regression, y_values_for_regression)
+
+                    if np.isnan(slope_per_year): return np.nan
+
+                    # d. Return slope scaled by the desired number of years
+                    return slope_per_year * num_years
                 except Exception:
                     return np.nan
 
-            # --- Parallel Computation using Dask ---
-            # Ensure the time dimension is a single chunk for apply_ufunc
-            data_var = data_var.chunk({time_coord: -1, lat_coord: 'auto', lon_coord: 'auto'})
+            # --- Step 6: Chunk data and apply the trend function in parallel with Dask ---
+            data_var = data_var.chunk({time_coord_name: -1, 
+                                       lat_coord_name: 'auto',
+                                       lon_coord_name: 'auto'})
 
-            print("Computing trends in parallel with xarray...")
-            trend_result = xr.apply_ufunc(
-                apply_stl_slope,
+            print("Computing spatial trends in parallel with xarray.apply_ufunc...")
+            trend_da = xr.apply_ufunc(
+                apply_stl_slope_spatial,
                 data_var,
-                input_core_dims=[[time_coord]],
+                data_var[time_coord_name],
+                input_core_dims=[[time_coord_name], [time_coord_name]],
+                output_core_dims=[[]],
+                exclude_dims=set((time_coord_name,)),
                 vectorize=True,
                 dask='parallelized',
                 output_dtypes=[float],
-                dask_gufunc_kwargs={'allow_rechunk': True}
-            ).rename(f"{variable}_trend_per_{period_str}")
+                dask_gufunc_kwargs={'allow_rechunk': True} 
+            ).rename(f"{variable}_trend_per_{period_str_label}")
 
-            # Compute the result with a progress bar
-            with ProgressBar():
-                trend_computed = trend_result.compute()
-            print("Trend computation complete.")
+            # --- Step 7: Trigger computation and get the results ---
+            with ProgressBar(dt=2.0):
+                trend_computed_map = trend_da.compute()
+            print("Spatial trend computation complete.")
 
-            # --- Plotting ---
+            # --- Step 8: Plot the resulting trend map if requested ---
             if plot_map:
-                print("Generating plot...")
-                # Get time range for the title
+                print("Generating spatial trend map...")
                 try:
-                    start_time = data_var[time_coord].min().dt.strftime('%Y-%m').item()
-                    end_time = data_var[time_coord].max().dt.strftime('%Y-%m').item()
-                    time_period_str = f"{start_time} to {end_time}"
-                except Exception:
-                    time_period_str = "Selected Time Period"
+                    start_time_str = pd.to_datetime(data_var[time_coord_name].min().item()).strftime('%Y-%m')
+                    end_time_str = pd.to_datetime(data_var[time_coord_name].max().item()).strftime('%Y-%m')
+                    time_period_title_str = f"{start_time_str} to {end_time_str}"
+                except Exception: time_period_title_str = "Selected Time Period"
 
-                units = data_var.attrs.get('units', '')
-                var_name = data_var.attrs.get('long_name', variable)
-                cbar_label = f"{var_name} trend per {period_str} ({units})" if units else f"{var_name} trend per {period_str}"
+                data_units = data_var.attrs.get('units', '')
+                var_long_name = data_var.attrs.get('long_name', variable)
+                cbar_label_str = f"Trend ({data_units} / {period_str_label})" if data_units else f"Trend ({period_str_label})"
 
-                try:
-                    # --- Cartopy Plot ---
-                    fig = plt.figure(figsize=(12, 8))
-                    ax = fig.add_subplot(1, 1, 1, projection=ccrs.PlateCarree())
+                fig = plt.figure(figsize=(14, 8))
+                ax = fig.add_subplot(1, 1, 1, projection=ccrs.PlateCarree())
 
-                    contour = trend_computed.plot.contourf(
-                        ax=ax,
-                        transform=ccrs.PlateCarree(),
-                        cmap=cmap,
-                        robust=True,
-                        levels=40,
-                        extend='both',
-                        cbar_kwargs={'label': cbar_label}
-                    )
-                    contour.colorbar.set_label(cbar_label, size=14)
-                    contour.colorbar.ax.tick_params(labelsize=14)
+                # Create the plot using contourf for filled contours
+                contour_plot = trend_computed_map.plot.contourf(
+                    ax=ax, transform=ccrs.PlateCarree(), cmap=cmap,
+                    levels=30,
+                    robust=True,
+                    extend='both',
+                    cbar_kwargs={'label': cbar_label_str, 'orientation': 'vertical', 'shrink': 0.8, 'pad':0.05}
+                )
+                if contour_plot.colorbar:
+                    contour_plot.colorbar.set_label(cbar_label_str, size=12)
+                    contour_plot.colorbar.ax.tick_params(labelsize=10)
 
-                    # Add geographic features
-                    if land_only:
-                        # Add OCEAN feature to mask out oceans when land_only=True
-                        ax.add_feature(cfeature.OCEAN, zorder=2, facecolor='white')
-                        ax.coastlines(zorder=3)  # Ensure coastlines are drawn on top
-                        ax.add_feature(cfeature.BORDERS, linestyle=':', zorder=3)  # Borders on top too
-                    else:
-                        # Standard display without ocean masking
-                        ax.coastlines()
-                        ax.add_feature(cfeature.BORDERS, linestyle=':')
-                    
-                    gl = ax.gridlines(draw_labels=True, linewidth=1, color='gray', alpha=0.5, linestyle='--')
-                    gl.top_labels = False
-                    gl.right_labels = False
-                    gl.xlabel_style = {'size': 14}
-                    gl.ylabel_style = {'size': 14}
-                    
-                    # Create title
-                    season_str = season.upper() if season.lower() != 'annual' else 'Annual'
-                    title = f"{season_str} {var_name.capitalize()} Trends ({units} per {period_str})\n{time_period_str}"
-                    if level_selection_info:
-                        title += f"\n{level_selection_info}"
-                    ax.set_title(title, fontsize=14)
+                # Add geographic features
+                if land_only:
+                    ax.add_feature(cfeature.OCEAN, zorder=2, facecolor='lightgrey')
+                    ax.add_feature(cfeature.LAND, zorder=1, facecolor='white')
+                    ax.coastlines(zorder=3, linewidth=0.8)
+                    ax.add_feature(cfeature.BORDERS, linestyle=':', zorder=3, linewidth=0.6)
+                else:
+                    ax.coastlines(linewidth=0.8)
+                    ax.add_feature(cfeature.BORDERS, linestyle=':', linewidth=0.6)
+                
+                # Customize gridlines and labels
+                gl = ax.gridlines(draw_labels=True, linewidth=0.7, color='gray', alpha=0.5, linestyle='--')
+                gl.top_labels = False; gl.right_labels = False
+                gl.xlabel_style = {'size': 10}; gl.ylabel_style = {'size': 10}
+                
+                # Set a descriptive title
+                season_title_str = season.upper() if season.lower() != 'annual' else 'Annual'
+                plot_title = (f"{season_title_str} {var_long_name.capitalize()} Trend ({period_str_label})\n"
+                              f"{time_period_title_str}")
+                if level_selection_info_title: plot_title += f" at {level_selection_info_title}"
+                ax.set_title(plot_title, fontsize=14)
 
-                    plt.tight_layout()
+                plt.tight_layout(pad=1.5)
+                if save_plot_path:
+                    plt.savefig(save_plot_path, dpi=300, bbox_inches='tight')
+                    print(f"Plot saved to {save_plot_path}")
+                plt.show()
 
-                    if save_plot_path:
-                        plt.savefig(save_plot_path, dpi=300, bbox_inches='tight')
-                        print(f"Plot saved to {save_plot_path}")
-                    plt.show()
-
-                except Exception as plot_err:
-                    print(f"An error occurred during plotting: {plot_err}")
-
-            return trend_computed
+            # --- Step 9: Return the computed trend data ---
+            return trend_computed_map
 
         except Exception as e:
-            print(f"An error occurred during processing: {e}")
-            return None
+            print(f"An error occurred during spatial trend processing: {e}")
+            raise
         finally:
-            # --- Dask Client Shutdown ---
-            if 'client' in locals() and client is not None:
-                print("Shutting down Dask client...")
-                client.close()
-                if 'cluster' in locals() and cluster is not None:
-                    cluster.close()
-                print("Dask client closed.")
+            # --- Step 10: Ensure Dask client and cluster are closed ---
+            if client: client.close()
+            if cluster: cluster.close()
+            print("Dask client and cluster for spatial trends closed.")
+
 __all__ = ['TrendsAccessor']

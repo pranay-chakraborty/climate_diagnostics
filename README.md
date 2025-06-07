@@ -2,7 +2,7 @@
 
 ![Python Version](https://img.shields.io/badge/python-3.11+-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
-![Version](https://img.shields.io/badge/version-0.2.2-brightgreen.svg)
+![Version](https://img.shields.io/badge/version-0.3.0-brightgreen.svg)
 ![Status](https://img.shields.io/badge/status-alpha-orange.svg)
 [![PyPI version](https://img.shields.io/pypi/v/climate_diagnostics.svg)](https://pypi.org/project/climate_diagnostics/)
 
@@ -12,7 +12,7 @@ A Python package for analyzing and visualizing climate data from NetCDF files wi
 
 ## Overview
 
-Climate Diagnostics Toolkit provides powerful tools to process, analyze, and visualize climate data using xarray accessors. The package offers functionality for seasonal filtering, spatial averaging with proper area weighting, trend analysis, and time series decomposition to help climate scientists extract meaningful insights from large climate datasets directly from their xarray Dataset objects.
+The Climate Diagnostics Toolkit provides powerful tools to process, analyze, and visualize climate data using xarray accessors. The package offers functionality for seasonal filtering, spatial averaging with proper area weighting, trend analysis, time series decomposition, and the calculation of standard climate indices to help climate scientists extract meaningful insights from large climate datasets directly from their xarray Dataset objects.
 
 ## Features
 
@@ -26,13 +26,15 @@ Climate Diagnostics Toolkit provides powerful tools to process, analyze, and vis
   * Plot time series with proper area weighting to account for grid cell size differences.
   * Calculate and visualize spatial standard deviations over time.
   * Decompose time series into trend, seasonal, and residual components using STL.
+  * **Calculate and plot time series of climate indices** such as Consecutive Wet/Dry Days (CWD/CDD), precipitation anomalies, and extreme event counts.
 
 * **Trend Analysis (via `.climate_trends`)**:
   * Calculate and visualize spatially averaged trends with statistical significance testing.
-  * Compute and plot spatial maps of trends per grid point using STL decomposition.
+  * Compute and plot spatial maps of trends per grid point using STL decomposition and parallel processing with Dask.
 
 * **Visualization (via `.climate_plots`)**:
-  * Generate spatial maps of means and standard deviations using Cartopy.
+  * Generate spatial maps of means, standard deviations, and percentiles using Cartopy.
+  * **Plot spatial maps of ETCCDI-style climate indices** like Rx1day, Rx5day, CWD, CDD, and spell duration indices (WSDI/DSDI).
   * Create publication-quality figures with map projections.
   * Optionally smooth spatial plots using Gaussian filters.
   * Option to plot data only over land.
@@ -104,13 +106,11 @@ spatial_trends = ds.climate_trends.calculate_spatial_trends(
     variable="air",
     level=850,
     season="annual",
-    frequency="M", # Assuming monthly data
     num_years=10,  # Trend per decade
     plot_map=True,
-    n_workers = 8,
+    n_workers=8,
     latitude = slice(40,6),
     longitude = slice(60,110)
-    
 )
 ```
 
@@ -130,18 +130,33 @@ ds.climate_plots.plot_mean(
     latitude = slice(40,6),
     longitude = slice(60,110)
 )
+```
 
-# Plot standard deviation over time, smoothed, over land only
-ds.climate_plots.plot_std_time(
-    variable="air",
-    season="jjas",
-    gaussian_sigma=1.5, # Apply smoothing
-    land_only=True,      # Mask oceans
-    latitude = slice(40,6),
-    longitude = slice(60,110),
-    levels = 500
+### Plotting Climate Indices
+```python
+import xarray as xr
+from climate_diagnostics import accessors
+
+# Load data
+ds = xr.open_dataset("path/to/precipitation_data.nc") # Assumes daily data
+
+# Plot the mean annual maximum number of consecutive wet days (CWD)
+# A "wet day" is defined here as a day with precipitation >= 1.0 mm/day.
+ds.climate_plots.plot_consecutive_wet_days(
+    variable="prate",
+    threshold=1.0,
+    latitude=slice(40, 6),
+    longitude=slice(60, 110)
+)
+
+# Plot the mean annual maximum 5-day precipitation total (Rx5day)
+ds.climate_plots.plot_rx5day(
+    variable="prate",
+    latitude=slice(40, 6),
+    longitude=slice(60, 110)
 )
 ```
+
 
 ## Dependencies
 
@@ -182,7 +197,7 @@ pytest
 If you use Climate Diagnostics Toolkit in your research, please cite:
 
 ```
-Chakraborty, P. (2025) & Muhammed I. K., A. (2025). Climate Diagnostics Toolkit: Tools for analyzing and visualizing climate data using xarray accessors. Version 0.2.1. https://github.com/pranay-chakraborty/climate_diagnostics
+Chakraborty, P. (2025) & Muhammed I. K., A. (2025). Climate Diagnostics Toolkit: Tools for analyzing and visualizing climate data using xarray accessors. Version 0.3.0. https://github.com/pranay-chakraborty/climate_diagnostics
 ```
 
 For LaTeX users:
@@ -192,7 +207,7 @@ For LaTeX users:
   author = {Chakraborty, Pranay and Muhammed I. K., Adil},
   title = {{Climate Diagnostics Toolkit: Tools for analyzing and visualizing climate data using xarray accessors}},
   year = {2025},
-  version = {0.2.1},
+  version = {0.3.0},
   publisher = {GitHub},
   url = {https://github.com/pranay-chakraborty/climate_diagnostics},
   note = {[Computer software]}
