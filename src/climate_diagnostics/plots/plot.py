@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from typing import cast
 from dask.diagnostics import ProgressBar
+from ..utils import get_or_create_dask_client, get_coord_name, filter_by_season
 try:
     import cmocean
 except ImportError:
@@ -12,6 +13,37 @@ except ImportError:
 
 @xr.register_dataset_accessor("climate_plots")
 class PlotsAccessor:
+    """
+    A custom xarray accessor for creating climate-specific visualizations.
+
+    This accessor extends xarray Dataset and DataArray objects with a `.climate_plots`
+    namespace, providing a suite of plotting methods for common climate diagnostics.
+    These methods simplify the process of selecting data, calculating indices,
+    and generating publication-quality spatial plots.
+
+    The accessor handles common data-wrangling tasks such as:
+    - Finding coordinate names (e.g., 'lat', 'latitude').
+    - Subsetting data by space, time, and vertical level.
+    - Applying seasonal filters.
+    - Calculating standard climate indices (e.g., Rx5day, CWD).
+    - Generating descriptive titles and labels.
+
+    Examples
+    --------
+    >>> import xarray as xr
+    >>> # Assuming 'climate_diagnostics' is imported to register the accessor
+    >>> import climate_diagnostics
+    >>>
+    >>> # Load a dataset
+    >>> ds = xr.tutorial.load_dataset("air_temperature")
+    >>>
+    >>> # Generate a plot of the mean air temperature for a specific time range
+    >>> ds.climate_plots.plot_mean(
+    ...     variable='air',
+    ...     time_range=slice('2013-05', '2013-09'),
+    ...     season='jja'
+    ... )
+    """
     # --------------------------------------------------------------------------
     # INITIALIZATION
     # --------------------------------------------------------------------------
@@ -22,107 +54,6 @@ class PlotsAccessor:
     # --------------------------------------------------------------------------
     # INTERNAL HELPER METHODS: DATA SELECTION & PREPARATION
     # --------------------------------------------------------------------------
-    def _get_coord_name(self, xarray_like_obj, possible_names):
-        """
-        Find the name of a coordinate in an xarray object from a list of possible names.
-
-        This function checks for coordinate names in a case-sensitive manner first,
-        then falls back to a case-insensitive check.
-
-        Parameters
-        ----------
-        xarray_like_obj : xr.DataArray or xr.Dataset
-            The xarray object to search for coordinates.
-        possible_names : list of str
-            A list of possible coordinate names to look for.
-
-        Returns
-        -------
-        str or None
-            The found coordinate name, or None if no matching coordinate is found.
-        """
-        if xarray_like_obj is None: return None
-        for name in possible_names:
-            if name in xarray_like_obj.coords:
-                return name
-        coord_names_lower = {name.lower(): name for name in xarray_like_obj.coords}
-        for name in possible_names:
-            if name.lower() in coord_names_lower:
-                return coord_names_lower[name.lower()]
-        return None
-
-    def _filter_by_season(self, data_subset, season='annual'):
-        """
-        Filter the data for a specific season.
-
-        Supported seasons are 'annual', 'jjas', 'djf', 'mam', 'son', 'jja'.
-
-        Parameters
-        ----------
-        data_subset : xr.DataArray or xr.Dataset
-            The data to filter.
-        season : str, optional
-            The season to filter by. Defaults to 'annual'.
-
-        Returns
-        -------
-        xr.DataArray or xr.Dataset
-            The filtered data.
-        """
-        season_input = season
-        season = season.lower()
-        if season == 'annual':
-            return data_subset
-
-        time_coord_name = self._get_coord_name(data_subset, ['time', 't'])
-        if time_coord_name is None:
-            raise ValueError("Cannot find time coordinate for seasonal filtering.")
-
-        if time_coord_name not in data_subset.dims:
-            if time_coord_name in data_subset.coords:
-                 print(f"Warning: Time coordinate '{time_coord_name}' exists but is not a dimension. "
-                       "Cannot filter by season. Returning unfiltered data.")
-                 return data_subset
-            raise ValueError(f"Time dimension '{time_coord_name}' not found for seasonal filtering.")
-
-        time_coord_da = data_subset[time_coord_name]
-        if 'month' in data_subset.coords:
-            month_coord = data_subset['month']
-        elif hasattr(time_coord_da.dt, 'month'):
-            month_coord = time_coord_da.dt.month
-        elif time_coord_da.size > 0 and hasattr(time_coord_da.data[0], 'month'):
-            try:
-                time_values = time_coord_da.values
-                months_list = [t.month for t in time_values]
-                month_coord = xr.DataArray(months_list, coords={time_coord_name: time_coord_da}, dims=[time_coord_name])
-                print("Warning: Extracted months from cftime objects manually. This might be slow for large Dask arrays.")
-            except Exception as e:
-                 raise ValueError(f"Time coordinate '{time_coord_name}' (type: {time_coord_da.dtype}) "
-                                  f"could not be processed for month extraction. Error: {e}")
-        else:
-            raise ValueError(f"Cannot determine month for seasonal filtering from time coordinate '{time_coord_name}' "
-                             f"(dtype: {time_coord_da.dtype}). It's not datetime64-like with a .dt.month accessor, "
-                             "not cftime-like with a .month attribute, and no 'month' coordinate exists.")
-
-
-        season_months = {'jjas': [6, 7, 8, 9], 'djf': [12, 1, 2], 'mam': [3, 4, 5], 'son': [9, 10, 11], 'jja': [6, 7, 8]}
-        selected_months = season_months.get(season)
-
-        if selected_months:
-            if not set(month_coord.dims).issubset(set(data_subset.dims)) or \
-               not all(s1 == s2 for s1,s2 in zip(month_coord.shape, data_subset.shape) if month_coord.dims[0] == data_subset.dims[0]):
-                month_coord = month_coord.reindex_like(data_subset[time_coord_name], method='nearest', tolerance='1D')
-
-
-            filtered_data = data_subset.where(month_coord.isin(selected_months), drop=True)
-            if filtered_data[time_coord_name].size == 0:
-                print(f"Warning: No data found for season '{season_input.upper()}' within the selected time range.")
-            return filtered_data
-        else:
-            print(f"Warning: Unknown season '{season_input}'. Supported: {list(season_months.keys())}. Returning unfiltered data.")
-            return data_subset
-
-
     def _select_data(self, variable, latitude=None, longitude=None, level=None, time_range=None):
         """
         Select a data variable and subset it based on spatial, temporal, and level coordinates.
@@ -140,8 +71,9 @@ class PlotsAccessor:
         longitude : float, slice, or list, optional
             Longitude range to select.
         level : float or slice, optional
-            Level to select. If a slice, data will be averaged over the level dimension.
-            If not provided and multiple levels exist, the first level is selected.
+            Level to select. A single value will be matched to the nearest level,
+            while a slice will select a range of levels. If not provided and
+            multiple levels exist, the first level is selected by default.
         time_range : slice, optional
             Time range to select, specified as a slice of datetime-like objects or strings.
 
@@ -170,9 +102,9 @@ class PlotsAccessor:
 
         # --- Step 2: Dynamically map standard coordinate names to actual names in the dataset ---
         coord_map = {
-            'latitude': self._get_coord_name(data_var, ['lat', 'latitude', 'LAT', 'LATITUDE', 'y', 'rlat', 'nav_lat']),
-            'longitude': self._get_coord_name(data_var, ['lon', 'longitude', 'LON', 'LONGITUDE', 'x', 'rlon', 'nav_lon']),
-            'time': self._get_coord_name(data_var, ['time', 't']),
+            'latitude': get_coord_name(data_var, ['lat', 'latitude', 'LAT', 'LATITUDE', 'y', 'rlat', 'nav_lat']),
+            'longitude': get_coord_name(data_var, ['lon', 'longitude', 'LON', 'LONGITUDE', 'x', 'rlon', 'nav_lon']),
+            'time': get_coord_name(data_var, ['time', 't']),
             'level': next((name for name in ['level', 'lev', 'plev', 'height', 'altitude', 'depth', 'z'] if name in data_var.dims or name in data_var.coords), None)
         }
         level_dim_name_found = coord_map['level']
@@ -328,7 +260,7 @@ class PlotsAccessor:
             The matplotlib Axes object with a geographical projection.
         """
         fig = plt.figure(figsize=figsize)
-        ax = plt.axes(projection=ccrs.PlateCarree())
+        ax = plt.axes(projection=ccrs.Robinson())
         feature_zorder, ocean_zorder, gridline_zorder = 3, 2, 4
         ax.add_feature(cfeature.BORDERS, linestyle='--', linewidth=1, zorder=feature_zorder)
         ax.coastlines(zorder=feature_zorder)
@@ -570,8 +502,8 @@ class PlotsAccessor:
         # --- Step 1: Set up the cartopy map axes and identify coordinate names ---
         fig, ax = self._setup_geographical_ax(figsize, land_only)
         data_zorder = 1
-        lat_name_plot = self._get_coord_name(processed_data_to_plot, ['lat', 'latitude', 'LAT', 'LATITUDE', 'y', 'rlat', 'nav_lat'])
-        lon_name_plot = self._get_coord_name(processed_data_to_plot, ['lon', 'longitude', 'LON', 'LONGITUDE', 'x', 'rlon', 'nav_lon'])
+        lat_name_plot = get_coord_name(processed_data_to_plot, ['lat', 'latitude', 'LAT', 'LATITUDE', 'y', 'rlat', 'nav_lat'])
+        lon_name_plot = get_coord_name(processed_data_to_plot, ['lon', 'longitude', 'LON', 'LONGITUDE', 'x', 'rlon', 'nav_lon'])
 
         if not lat_name_plot or not lon_name_plot:
             raise ValueError(f"Lat/Lon coordinates not found in processed data for '{original_variable_name}'.")
@@ -711,7 +643,7 @@ class PlotsAccessor:
         xr.DataArray
             A DataArray with the mean annual number of days meeting the condition.
         """
-        condition_met = (data_in > threshold_val) if is_above_op else (data_in < threshold_val)
+        condition_met = (data_in >= threshold_val) if is_above_op else (data_in < threshold_val)
         return self._apply_yearly_op_then_mean(condition_met.astype(int), time_coord_name, 'sum', dask_op_name="days matching condition")
 
     def _calc_max_consecutive_days(self, data_in, time_coord_name, threshold_val, spell_type_is_above_thresh):
@@ -719,13 +651,45 @@ class PlotsAccessor:
         Calculate the mean of the annual maximum number of consecutive days
         above or below a threshold. Vectorized implementation.
         """
-        condition = (data_in > threshold_val) if spell_type_is_above_thresh else (data_in < threshold_val)
+        condition = (data_in >= threshold_val) if spell_type_is_above_thresh else (data_in < threshold_val)
         
         # Get the length of each consecutive run of True values
         consecutive_lengths = self._vectorized_consecutive_true_count(condition, dim=time_coord_name)
         
         # Group by year and find the maximum length within each year, then average the maxima
         return self._apply_yearly_op_then_mean(consecutive_lengths, time_coord_name, 'max', dask_op_name="max consecutive days")
+
+    def _calc_days_in_spell(self, data_in, time_coord_name, threshold_val, min_consecutive_days, spell_type_is_above_thresh):
+        """
+        Calculate the mean annual number of days in spells (e.g., WSDI).
+        A "spell" is a period of consecutive days meeting a condition for at least a minimum number of days.
+        This function counts the total number of days within such spells.
+        """
+        condition = (data_in >= threshold_val) if spell_type_is_above_thresh else (data_in < threshold_val)
+
+        # Calculate the length of each consecutive run up to the current point
+        consecutive_lengths = self._vectorized_consecutive_true_count(condition, dim=time_coord_name)
+
+        # Identify the end of each consecutive run of True values.
+        # A run ends if the current value is True and the next is False.
+        is_spell_end = (condition & ~condition.shift({time_coord_name: -1}, fill_value=False))
+
+        # Get the total length of each spell at the point where the spell ends.
+        # Where it's not a spell end, this will be NaN.
+        spell_end_lengths = consecutive_lengths.where(is_spell_end)
+
+        # Back-fill the total spell length over the duration of each spell.
+        # This propagates the final length of a spell to all days within that spell.
+        total_spell_lengths = spell_end_lengths.bfill(dim=time_coord_name)
+
+        # Mask out days that were not part of any spell to begin with.
+        total_spell_lengths = total_spell_lengths.where(condition, 0)
+
+        # Identify which days are part of a spell that meets the minimum duration requirement.
+        is_in_qualifying_spell = (total_spell_lengths >= min_consecutive_days)
+
+        # Sum the number of qualifying days per year and then average over the years.
+        return self._apply_yearly_op_then_mean(is_in_qualifying_spell.astype(int), time_coord_name, 'sum', dask_op_name="days in spell")
 
     # ==============================================================================
     # PUBLIC PLOTTING METHODS
@@ -739,43 +703,69 @@ class PlotsAccessor:
                   figsize=(16, 10), cmap='coolwarm', land_only=False,
                   levels=30, save_plot_path=None):
         """
-        Plot the temporal mean of a variable.
+        Plot the temporal mean of a variable over a specified period.
 
         Calculates and plots the mean of a given variable over the specified
-        time, space, and level dimensions.
+        time, space, and level dimensions. This is a fundamental plot for
+        understanding the basic climate state.
 
         Parameters
         ----------
         variable : str, optional
             Name of the variable to plot. Defaults to 'air'.
         latitude : float, slice, or list, optional
-            Latitude range for data selection.
+            Latitude range for selection. Can be a single value, a list of values,
+            or a slice object (e.g., slice(30, 60)).
         longitude : float, slice, or list, optional
-            Longitude range for data selection.
+            Longitude range for selection. Can be a single value, a list, or a slice
+            (e.g., slice(-120, -80)).
         level : float or slice, optional
-            Vertical level for data selection.
+            Vertical level for data selection. A single value selects the nearest
+            level. A slice (e.g., slice(500, 200)) will result in the data being
+            averaged over that level range before the temporal mean is computed.
         time_range : slice, optional
-            Time range for data selection.
+            Time range for selection, specified as a slice of datetime-like objects
+            or strings (e.g., slice('2000-01-01', '2010-12-31')).
         season : str, optional
-            Season to calculate the mean for. Defaults to 'annual'.
+            Season to calculate the mean for. Supported options are 'annual',
+            'jjas', 'djf', 'mam', 'son', 'jja'. Defaults to 'annual'.
         contour : bool, optional
-            If True, use contour lines. Otherwise, use filled contours. Defaults to False.
+            If True, use contour lines instead of filled contours. Defaults to False.
         figsize : tuple, optional
-            Figure size. Defaults to (16, 10).
+            Figure size in inches (width, height). Defaults to (16, 10).
         cmap : str, optional
-            Colormap name. Defaults to 'coolwarm'.
+            Colormap name for the plot. Defaults to 'coolwarm'.
         land_only : bool, optional
-            If True, mask oceans. Defaults to False.
+            If True, mask out ocean areas, plotting data only over land.
+            Defaults to False.
         levels : int, optional
-            Number of contour levels. Defaults to 30.
+            Number of contour levels for the plot. Defaults to 30.
         save_plot_path : str or None, optional
-            Path to save the plot.
+            If provided, the path to save the plot figure to.
 
         Returns
         -------
         cartopy.mpl.geoaxes.GeoAxes
-            The Axes object of the plot.
+            The Axes object of the plot, allowing for further customization.
+
+        See Also
+        --------
+        plot_std_time : Plot the temporal standard deviation.
+        plot_percentile_spatial : Plot a specific temporal percentile.
+
+        Examples
+        --------
+        >>> import xarray as xr
+        >>> import climate_diagnostics
+        >>> ds = xr.tutorial.load_dataset("air_temperature")
+        >>> ds.climate_plots.plot_mean(
+        ...     variable='air',
+        ...     level=850,
+        ...     time_range=slice('2013-01', '2013-12'),
+        ...     season='djf'
+        ... )
         """
+        get_or_create_dask_client()
         # Step 1: Select the data based on user parameters
         selected_data, level_dim_name, level_op = self._select_data(
             variable, latitude, longitude, level, time_range
@@ -788,12 +778,12 @@ class PlotsAccessor:
              print(f"Averaging over selected levels for '{variable}'.")
 
         # Step 3: Apply seasonal filter
-        data_season = self._filter_by_season(current_data_for_ops, season)
+        data_season = filter_by_season(current_data_for_ops, season)
         if data_season.size == 0:
             raise ValueError(f"No data after selections and season filter ('{season}') for '{variable}'.")
 
         # Step 4: Calculate the temporal mean
-        time_coord_name_actual = self._get_coord_name(data_season, ['time', 't'])
+        time_coord_name_actual = get_coord_name(data_season, ['time', 't'])
         
         mean_data = data_season
         if time_coord_name_actual and time_coord_name_actual in data_season.dims:
@@ -823,40 +813,52 @@ class PlotsAccessor:
         """
         Plot the temporal standard deviation of a variable.
 
-        Calculates and plots the standard deviation of a given variable over time.
+        Calculates and plots the standard deviation of a given variable over time,
+        which is a key measure of climate variability.
 
         Parameters
         ----------
         variable : str, optional
             Name of the variable to plot. Defaults to 'air'.
         latitude : float, slice, or list, optional
-            Latitude range for data selection.
+            Latitude range for selection. Can be a single value, a list of values,
+            or a slice object (e.g., slice(30, 60)).
         longitude : float, slice, or list, optional
-            Longitude range for data selection.
+            Longitude range for selection. Can be a single value, a list, or a slice
+            (e.g., slice(-120, -80)).
         level : float or slice, optional
-            Vertical level for data selection.
+            Vertical level for data selection. A single value selects the nearest
+            level. A slice (e.g., slice(500, 200)) will result in the data being
+            averaged over that level range before the standard deviation is computed.
         time_range : slice, optional
-            Time range for data selection.
+            Time range for selection, specified as a slice of datetime-like objects
+            or strings (e.g., slice('2000-01-01', '2010-12-31')).
         season : str, optional
-            Season to calculate the standard deviation for. Defaults to 'annual'.
+            Season to calculate the standard deviation for. Supported options are 'annual',
+            'jjas', 'djf', 'mam', 'son', 'jja'. Defaults to 'annual'.
         contour : bool, optional
-            If True, use contour lines. Defaults to False.
+            If True, use contour lines instead of filled contours. Defaults to False.
         figsize : tuple, optional
-            Figure size. Defaults to (16, 10).
+            Figure size in inches (width, height). Defaults to (16, 10).
         cmap : str, optional
-            Colormap name. Defaults to 'viridis'.
+            Colormap name for the plot. Defaults to 'viridis'.
         land_only : bool, optional
-            If True, mask oceans. Defaults to False.
+            If True, mask out ocean areas. Defaults to False.
         levels : int, optional
             Number of contour levels. Defaults to 30.
         save_plot_path : str or None, optional
-            Path to save the plot.
+            If provided, the path to save the plot figure to.
 
         Returns
         -------
         cartopy.mpl.geoaxes.GeoAxes
             The Axes object of the plot.
+
+        See Also
+        --------
+        plot_mean : Plot the temporal mean.
         """
+        get_or_create_dask_client()
         # Step 1: Select the data based on user parameters
         selected_data, level_dim_name, level_op = self._select_data(
             variable, latitude, longitude, level, time_range
@@ -870,11 +872,11 @@ class PlotsAccessor:
             print(f"Averaging across selected levels for '{variable}' before calculating std dev.")
 
         # Step 3: Apply seasonal filter
-        time_coord_name_actual = self._get_coord_name(current_data_for_ops, ['time', 't'])
+        time_coord_name_actual = get_coord_name(current_data_for_ops, ['time', 't'])
         if not time_coord_name_actual or time_coord_name_actual not in current_data_for_ops.dims:
              raise ValueError(f"Std dev requires time dimension for '{variable}'.")
 
-        data_season = self._filter_by_season(current_data_for_ops, season)
+        data_season = filter_by_season(current_data_for_ops, season)
         if data_season.size == 0:
             raise ValueError(f"No data after selections and season filter ('{season}') for '{variable}'.")
         if data_season.sizes[time_coord_name_actual] < 2:
@@ -904,7 +906,8 @@ class PlotsAccessor:
         Plot the spatial distribution of a temporal percentile for a variable.
 
         Calculates a given percentile (e.g., 95th) at each grid point over the
-        time dimension and plots the resulting map.
+        time dimension and plots the resulting map. This is useful for identifying
+        areas with extreme values.
 
         Parameters
         ----------
@@ -913,31 +916,38 @@ class PlotsAccessor:
         percentile : int, optional
             The percentile to calculate (0-100). Defaults to 95.
         latitude : float, slice, or list, optional
-            Latitude range.
+            Latitude range for selection. Can be a single value, a list of values,
+            or a slice object.
         longitude : float, slice, or list, optional
-            Longitude range.
+            Longitude range for selection. Can be a single value, a list, or a slice.
         level : float or slice, optional
-            Vertical level.
+            Vertical level for data selection. A single value selects the nearest
+            level. A slice will result in the data being averaged over that range.
         time_range : slice, optional
-            Time range.
+            Time range for selection as a slice of datetime-like objects or strings.
         contour : bool, optional
-            Use contour lines if True. Defaults to False.
+            If True, use contour lines instead of filled contours. Defaults to False.
         figsize : tuple, optional
-            Figure size. Defaults to (16, 10).
+            Figure size in inches (width, height). Defaults to (16, 10).
         cmap : str, optional
-            Colormap. Defaults to 'Blues'.
+            Colormap name for the plot. Defaults to 'Blues'.
         land_only : bool, optional
-            Mask oceans if True. Defaults to False.
+            If True, mask out ocean areas. Defaults to False.
         levels : int, optional
-            Number of contour levels. Defaults to 30.
+            Number of contour levels for the plot. Defaults to 30.
         save_plot_path : str or None, optional
-            Path to save the plot.
+            If provided, the path to save the plot figure to.
 
         Returns
         -------
         cartopy.mpl.geoaxes.GeoAxes
             The Axes object of the plot.
+
+        See Also
+        --------
+        plot_mean : Plot the temporal mean of a variable.
         """
+        get_or_create_dask_client()
         # Step 1: Validate input
         if not 0 <= percentile <= 100:
             raise ValueError(f"Percentile must be 0-100, got {percentile}")
@@ -954,7 +964,7 @@ class PlotsAccessor:
             print(f"Averaging across selected levels for '{variable}' before calculating percentile.")
 
         # Step 3: Calculate the temporal percentile
-        time_coord_name = self._get_coord_name(current_data_for_ops, ['time', 't'])
+        time_coord_name = get_coord_name(current_data_for_ops, ['time', 't'])
         if not time_coord_name or time_coord_name not in current_data_for_ops.dims:
             raise ValueError(f"Percentile calculation requires time dimension for '{variable}'.")
         
@@ -984,21 +994,24 @@ class PlotsAccessor:
         """
         Plot the mean of annual sums for a variable.
 
-        This is often used for precipitation-related variables to show the average
-        annual total precipitation.
+        This is often used for precipitation-related variables (e.g., 'prate')
+        to show the average annual total precipitation, a key climate indicator.
+        It works by summing the variable over each year and then averaging these
+        annual sums over the entire time period.
 
         Parameters
         ----------
         variable : str, optional
             Name of the variable. Defaults to 'prate'.
         latitude : float, slice, or list, optional
-            Latitude range.
+            Latitude range for selection.
         longitude : float, slice, or list, optional
-            Longitude range.
+            Longitude range for selection.
         level : float or slice, optional
-            Vertical level.
+            Vertical level for selection. If a slice is given, data is averaged
+            over the level range.
         time_range : slice, optional
-            Time range.
+            Time range for selection.
         contour : bool, optional
             Use contour lines if True. Defaults to False.
         figsize : tuple, optional
@@ -1016,7 +1029,12 @@ class PlotsAccessor:
         -------
         cartopy.mpl.geoaxes.GeoAxes
             The Axes object of the plot.
+
+        See Also
+        --------
+        plot_rx1day : Plot the mean annual maximum 1-day precipitation.
         """
+        get_or_create_dask_client()
         # Step 1: Select the data based on user parameters
         selected_data, level_dim_name, level_op = self._select_data(
             variable, latitude, longitude, level, time_range
@@ -1029,7 +1047,7 @@ class PlotsAccessor:
             print(f"Averaging mean annual sum across selected levels for '{variable}'.")
 
         # Step 2: Calculate the mean of annual sums
-        time_coord_name = self._get_coord_name(current_data_for_ops, ['time', 't'])
+        time_coord_name = get_coord_name(current_data_for_ops, ['time', 't'])
         if not time_coord_name or time_coord_name not in current_data_for_ops.dims:
             raise ValueError(f"Annual sum mean requires time dimension for '{variable}'.")
         
@@ -1051,21 +1069,24 @@ class PlotsAccessor:
         """
         Plot the mean annual maximum 1-day precipitation (Rx1day).
 
-        Rx1day is a climate index representing the maximum precipitation amount
-        in a single day, averaged over many years.
+        Rx1day is a climate index from the Expert Team on Climate Change Detection
+        and Indices (ETCCDI). It represents the maximum precipitation amount
+        in a single day for each year, averaged over the specified time period.
+        It is a key indicator of extreme precipitation events.
 
         Parameters
         ----------
         variable : str, optional
             Name of the precipitation variable. Defaults to 'prate'.
         latitude : float, slice, or list, optional
-            Latitude range.
+            Latitude range for selection.
         longitude : float, slice, or list, optional
-            Longitude range.
+            Longitude range for selection.
         level : float or slice, optional
-            Vertical level.
+            Vertical level for selection. If a slice is given, data is averaged
+            over the level range.
         time_range : slice, optional
-            Time range.
+            Time range for selection.
         contour : bool, optional
             Use contour lines if True. Defaults to False.
         figsize : tuple, optional
@@ -1083,7 +1104,12 @@ class PlotsAccessor:
         -------
         cartopy.mpl.geoaxes.GeoAxes
             The Axes object of the plot.
+
+        See Also
+        --------
+        plot_rx5day : Plot the mean annual maximum 5-day precipitation.
         """
+        get_or_create_dask_client()
         # Step 1: Select the data based on user parameters
         selected_data, level_dim_name, level_op = self._select_data(
             variable, latitude, longitude, level, time_range
@@ -1096,7 +1122,7 @@ class PlotsAccessor:
             print(f"Averaging Rx1day across selected levels for '{variable}'.")
 
         # Step 2: Calculate the mean of annual maxima
-        time_coord_name = self._get_coord_name(current_data_for_ops, ['time', 't'])
+        time_coord_name = get_coord_name(current_data_for_ops, ['time', 't'])
         if not time_coord_name or time_coord_name not in current_data_for_ops.dims:
             raise ValueError(f"Rx1day requires time dimension for '{variable}'.")
 
@@ -1118,8 +1144,10 @@ class PlotsAccessor:
         """
         Plot the mean annual maximum 5-day precipitation (Rx5day).
 
-        Rx5day is a climate index for the maximum precipitation amount in any
-        consecutive 5-day period, averaged over many years.
+        Rx5day is a climate index (ETCCDI) for the maximum precipitation amount
+        in any consecutive 5-day period. This function finds the maximum 5-day
+        sum for each year and then averages these maxima over the entire time period.
+        It is an indicator of short-term precipitation extremes.
 
         Parameters
         ----------
@@ -1153,6 +1181,7 @@ class PlotsAccessor:
         cartopy.mpl.geoaxes.GeoAxes
             The Axes object of the plot.
         """
+        get_or_create_dask_client()
         # Step 1: Select the data based on user parameters
         selected_data, level_dim_name, level_op = self._select_data(
             variable, latitude, longitude, level, time_range
@@ -1165,7 +1194,7 @@ class PlotsAccessor:
             print(f"Averaging across selected levels for '{variable}' before calculating Rx5day.")
 
         # Step 2: Calculate the 5-day rolling sum
-        time_coord_name = self._get_coord_name(current_data_for_ops, ['time', 't'])
+        time_coord_name = get_coord_name(current_data_for_ops, ['time', 't'])
         if not time_coord_name or time_coord_name not in current_data_for_ops.dims:
             raise ValueError(f"Rx5day requires time dimension for '{variable}'.")
 
@@ -1198,9 +1227,9 @@ class PlotsAccessor:
         """
         Plot the Wet Spell Duration Index (WSDI).
 
-        WSDI is the annual count of days with at least `min_consecutive_days`
-        where precipitation is above a certain percentile threshold. This implementation
-        calculates the number of *spells*, not total days.
+        WSDI is the total number of days per year that are part of a wet spell.
+        A wet spell is defined as a period of at least `min_consecutive_days`
+        where precipitation is above a certain percentile threshold.
 
         Parameters
         ----------
@@ -1236,6 +1265,7 @@ class PlotsAccessor:
         cartopy.mpl.geoaxes.GeoAxes
             The Axes object of the plot.
         """
+        get_or_create_dask_client()
         # Step 1: Validate inputs
         if not 0 <= threshold_percentile <= 100: raise ValueError("Percentile 0-100.")
         if min_consecutive_days < 1: raise ValueError("Min days >= 1.")
@@ -1250,7 +1280,7 @@ class PlotsAccessor:
             current_data_for_ops = current_data_for_ops.mean(dim=level_dim_name, skipna=True)
 
         # Step 3: Calculate the percentile threshold
-        time_coord_name = self._get_coord_name(current_data_for_ops, ['time', 't'])
+        time_coord_name = get_coord_name(current_data_for_ops, ['time', 't'])
         if not time_coord_name or time_coord_name not in current_data_for_ops.dims:
             raise ValueError(f"WSDI requires time dimension for '{variable}'.")
 
@@ -1260,8 +1290,8 @@ class PlotsAccessor:
         else:
             actual_threshold = current_data_for_ops.quantile(frac, dim=time_coord_name, skipna=True)
         
-        # Step 4: Calculate the mean annual spell count
-        mean_wsdi = self._calc_spell_counts(current_data_for_ops, time_coord_name, actual_threshold, min_consecutive_days, spell_type_is_above_thresh=True)
+        # Step 4: Calculate the mean annual number of days in wet spells
+        mean_wsdi = self._calc_days_in_spell(current_data_for_ops, time_coord_name, actual_threshold, min_consecutive_days, spell_type_is_above_thresh=True)
         
         # Step 5: Pass to the generic spatial plotting function
         index_specific_parts = f"\n(Pctl Thresh: {threshold_percentile}th, Min Duration: {min_consecutive_days} days)"
@@ -1270,7 +1300,7 @@ class PlotsAccessor:
             time_coord_name, time_range,
             level_op, level_dim_name, "Annual", contour,
             figsize, cmap, land_only, levels, save_plot_path,
-            plot_operation_name="Annual Wet Spell Duration Index",
+            plot_operation_name="Annual Wet Spell Duration Index (WSDI)",
             index_specific_title_parts=index_specific_parts, time_format_type='year'
         )
 
@@ -1279,11 +1309,11 @@ class PlotsAccessor:
                                 contour=False, figsize=(16, 10), cmap='YlOrBr',
                                 land_only=False, levels=30, save_plot_path=None):
         """
-        Plot the Dry Spell Duration Index (DSDI).
+        Plot the Dry Spell Duration Index.
 
-        DSDI is the annual count of days with at least `min_consecutive_days`
-        where precipitation is below a certain percentile threshold. This implementation
-        calculates the number of *spells*, not total days.
+        This index is the total number of days per year that are part of a dry spell.
+        A dry spell is defined as a period of at least `min_consecutive_days`
+        where precipitation is below a certain percentile threshold.
 
         Parameters
         ----------
@@ -1319,6 +1349,7 @@ class PlotsAccessor:
         cartopy.mpl.geoaxes.GeoAxes
             The Axes object of the plot.
         """
+        get_or_create_dask_client()
         # Step 1: Validate inputs
         if not 0 <= threshold_percentile <= 100: raise ValueError("Percentile 0-100.")
         if min_consecutive_days < 1: raise ValueError("Min days >= 1.")
@@ -1333,7 +1364,7 @@ class PlotsAccessor:
             current_data_for_ops = current_data_for_ops.mean(dim=level_dim_name, skipna=True)
 
         # Step 3: Calculate the percentile threshold
-        time_coord_name = self._get_coord_name(current_data_for_ops, ['time', 't'])
+        time_coord_name = get_coord_name(current_data_for_ops, ['time', 't'])
         if not time_coord_name or time_coord_name not in current_data_for_ops.dims:
             raise ValueError(f"DSDI requires time dimension for '{variable}'.")
 
@@ -1343,8 +1374,8 @@ class PlotsAccessor:
         else:
             actual_threshold = current_data_for_ops.quantile(frac, dim=time_coord_name, skipna=True)
         
-        # Step 4: Calculate the mean annual spell count
-        mean_dsdi = self._calc_spell_counts(current_data_for_ops, time_coord_name, actual_threshold, min_consecutive_days, spell_type_is_above_thresh=False)
+        # Step 4: Calculate the mean annual number of days in dry spells
+        mean_dsdi = self._calc_days_in_spell(current_data_for_ops, time_coord_name, actual_threshold, min_consecutive_days, spell_type_is_above_thresh=False)
         
         # Step 5: Pass to the generic spatial plotting function
         index_specific_parts = f"\n(Pctl Thresh: {threshold_percentile}th, Min Duration: {min_consecutive_days} days)"
@@ -1401,6 +1432,7 @@ class PlotsAccessor:
         cartopy.mpl.geoaxes.GeoAxes
             The Axes object of the plot.
         """
+        get_or_create_dask_client()
         # Step 1: Validate inputs
         if threshold is None and threshold_percentile is None:
             raise ValueError("Either threshold or threshold_percentile must be provided.")
@@ -1417,7 +1449,7 @@ class PlotsAccessor:
             current_data_for_ops = current_data_for_ops.mean(dim=level_dim_name, skipna=True)
 
         # Step 3: Determine the threshold value
-        time_coord_name = self._get_coord_name(current_data_for_ops, ['time', 't'])
+        time_coord_name = get_coord_name(current_data_for_ops, ['time', 't'])
         if not time_coord_name or time_coord_name not in current_data_for_ops.dims:
             raise ValueError(f"Calculation requires time dimension for '{variable}'.")
 
@@ -1445,7 +1477,7 @@ class PlotsAccessor:
             index_specific_title_parts=f"\n{threshold_info_for_title}", time_format_type='year'
         )
 
-    def plot_consecutive_wet_days(self, variable='prate', threshold=None, threshold_percentile=None,
+    def plot_consecutive_wet_days(self, variable='prate', threshold=1.157e-5, threshold_percentile=None,
                                 latitude=None, longitude=None, level=None, time_range=None,
                                 contour=False, figsize=(16, 10), cmap='Blues',
                                 land_only=False, levels=30, save_plot_path=None):
@@ -1453,17 +1485,19 @@ class PlotsAccessor:
         Plot the average annual maximum number of Consecutive Wet Days (CWD).
 
         CWD is the longest stretch of consecutive days in a year where a variable
-        (e.g., precipitation) is above a threshold. The result is averaged over
-        all years.
+        (e.g., precipitation) is at or above a threshold. The result is averaged
+        over all years. The default threshold corresponds to 1 mm/day for
+        precipitation rate in units of kg m-2 s-1, a common definition for CWD.
 
         Parameters
         ----------
         variable : str, optional
             Name of the variable. Defaults to 'prate'.
         threshold : float, optional
-            Absolute threshold value. One of `threshold` or `threshold_percentile` is required.
+            Absolute threshold value. Defaults to 1.157e-5 (~1mm/day).
+            Set to None if using `threshold_percentile`.
         threshold_percentile : int, optional
-            Percentile to use as the threshold (0-100).
+            Percentile to use as the threshold (0-100). Overrides `threshold` if set.
         latitude : float, slice, or list, optional
             Latitude range.
         longitude : float, slice, or list, optional
@@ -1490,8 +1524,9 @@ class PlotsAccessor:
         cartopy.mpl.geoaxes.GeoAxes
             The Axes object of the plot.
         """
+        get_or_create_dask_client()
         # Step 1: Validate inputs
-        if threshold is None and threshold_percentile is None: raise ValueError("Threshold needed.")
+        if threshold is None and threshold_percentile is None: raise ValueError("One of 'threshold' or 'threshold_percentile' must be provided.")
         if threshold_percentile is not None and not 0 <= threshold_percentile <= 100: raise ValueError("Percentile 0-100.")
 
         # Step 2: Select the data and handle level-based averaging
@@ -1504,14 +1539,14 @@ class PlotsAccessor:
             current_data_for_ops = current_data_for_ops.mean(dim=level_dim_name, skipna=True)
 
         # Step 3: Determine the threshold value
-        time_coord_name = self._get_coord_name(current_data_for_ops, ['time', 't'])
+        time_coord_name = get_coord_name(current_data_for_ops, ['time', 't'])
         if not time_coord_name or time_coord_name not in current_data_for_ops.dims:
             raise ValueError(f"CWD requires time dimension for '{variable}'.")
 
         actual_threshold_val = threshold
         var_units = current_data_for_ops.attrs.get('units', '')
         threshold_info_for_title = f"(Abs Thresh: {threshold} {var_units})"
-        if threshold is None:
+        if threshold_percentile is not None:
             frac = cast(float, threshold_percentile) / 100.0
             if current_data_for_ops.chunks:
                 with ProgressBar(): actual_threshold_val = current_data_for_ops.quantile(frac, dim=time_coord_name, skipna=True).compute()
@@ -1532,7 +1567,7 @@ class PlotsAccessor:
             index_specific_title_parts=f"\n{threshold_info_for_title}", time_format_type='year'
         )
 
-    def plot_consecutive_dry_days(self, variable='prate', threshold=None, threshold_percentile=None,
+    def plot_consecutive_dry_days(self, variable='prate', threshold=1.157e-5, threshold_percentile=None,
                                 latitude=None, longitude=None, level=None, time_range=None,
                                 contour=False, figsize=(16, 10), cmap='YlOrBr',
                                 land_only=False, levels=30, save_plot_path=None):
@@ -1541,16 +1576,18 @@ class PlotsAccessor:
 
         CDD is the longest stretch of consecutive days in a year where a variable
         (e.g., precipitation) is below a threshold. The result is averaged over
-        all years.
+        all years. The default threshold corresponds to 1 mm/day for
+        precipitation rate in units of kg m-2 s-1, a common definition for CDD.
 
         Parameters
         ----------
         variable : str, optional
             Name of the variable. Defaults to 'prate'.
         threshold : float, optional
-            Absolute threshold value. One of `threshold` or `threshold_percentile` is required.
+            Absolute threshold value. Defaults to 1.157e-5 (~1mm/day).
+            Set to None if using `threshold_percentile`.
         threshold_percentile : int, optional
-            Percentile to use as the threshold (0-100).
+            Percentile to use as the threshold (0-100). Overrides `threshold` if set.
         latitude : float, slice, or list, optional
             Latitude range.
         longitude : float, slice, or list, optional
@@ -1577,8 +1614,9 @@ class PlotsAccessor:
         cartopy.mpl.geoaxes.GeoAxes
             The Axes object of the plot.
         """
+        get_or_create_dask_client()
         # Step 1: Validate inputs
-        if threshold is None and threshold_percentile is None: raise ValueError("Threshold needed.")
+        if threshold is None and threshold_percentile is None: raise ValueError("One of 'threshold' or 'threshold_percentile' must be provided.")
         if threshold_percentile is not None and not 0 <= threshold_percentile <= 100: raise ValueError("Percentile 0-100.")
 
         # Step 2: Select the data and handle level-based averaging
@@ -1591,14 +1629,14 @@ class PlotsAccessor:
             current_data_for_ops = current_data_for_ops.mean(dim=level_dim_name, skipna=True)
 
         # Step 3: Determine the threshold value
-        time_coord_name = self._get_coord_name(current_data_for_ops, ['time', 't'])
+        time_coord_name = get_coord_name(current_data_for_ops, ['time', 't'])
         if not time_coord_name or time_coord_name not in current_data_for_ops.dims:
             raise ValueError(f"CDD requires time dimension for '{variable}'.")
 
         actual_threshold_val = threshold
         var_units = current_data_for_ops.attrs.get('units', '')
         threshold_info_for_title = f"(Abs Thresh: {threshold} {var_units})"
-        if threshold is None:
+        if threshold_percentile is not None:
             frac = cast(float, threshold_percentile) / 100.0
             if current_data_for_ops.chunks:
                 with ProgressBar(): actual_threshold_val = current_data_for_ops.quantile(frac, dim=time_coord_name, skipna=True).compute()
