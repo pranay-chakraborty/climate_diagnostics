@@ -1,24 +1,41 @@
 
 # Climate Diagnostics Toolkit
 
-![Python Version](https://img.shields.io/badge/python-3.11+-blue.svg)
-![License](https://img.shields.io/badge/license-MIT-green.svg)
-![Version](https://img.shields.io/badge/version-1.1-brightgreen.svg)
-![Status](https://img.shields.io/badge/status-alpha-orange.svg)
-[![PyPI version](https://img.shields.io/pypi/v/climate_diagnostics.svg)](https://pypi.org/project/climate_diagnostics/)
+[![Documentation](https://img.shields.io/badge/docs-latest-blue.svg)](https://pranay-chakraborty.github.io/climate_diagnostics/)
+[![Python Version](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Version](https://img.shields.io/badge/version-1.1-brightgreen.svg)](https://github.com/pranay-chakraborty/climate_diagnostics/releases)
+[![Status](https://img.shields.io/badge/status-alpha-orange.svg)](https://github.com/pranay-chakraborty/climate_diagnostics)
+[![GitHub Actions](https://github.com/pranay-chakraborty/climate_diagnostics/actions/workflows/docs.yml/badge.svg?branch=master)](https://github.com/pranay-chakraborty/climate_diagnostics/actions/workflows/docs.yml)
+[![Issues](https://img.shields.io/github/issues/pranay-chakraborty/climate_diagnostics.svg)](https://github.com/pranay-chakraborty/climate_diagnostics/issues)
+[![GitHub Stars](https://img.shields.io/github/stars/pranay-chakraborty/climate_diagnostics.svg)](https://github.com/pranay-chakraborty/climate_diagnostics/stargazers)
 
 A comprehensive Python toolkit for analyzing, processing, and visualizing climate data from model output, reanalysis, and observations. Built on xarray, it provides specialized accessors for time series, trends, and spatial diagnostics, with robust support for parallel processing and publication-quality figures.
 
-## Key Features
+> **🌍 Perfect for climate scientists, researchers, and data analysts working with atmospheric and oceanic datasets.**
 
-- **Seamless xarray Integration**: Access all features via `.climate_plots`, `.climate_timeseries`, and `.climate_trends` on xarray Datasets.
-- **Temporal Analysis**: Trend detection, STL decomposition, and variability analysis.
-- **Spatial Visualization**: Publication-quality maps with Cartopy, custom projections, and area-weighted statistics.
-- **Statistical Diagnostics**: Advanced methods for climate science, including ETCCDI indices.
-- **Multi-model Analysis**: Compare and evaluate climate model outputs.
-- **Performance**: Dask-powered parallel processing for large datasets.
+## 📋 Table of Contents
 
-## Installation
+- [✨ Key Features](#-key-features)
+- [📦 Installation](#-installation)
+- [🚀 Quick Start](#-quick-start)
+- [🔧 API Overview](#-api-overview)
+- [📚 Documentation](#-documentation)
+- [🤝 Contributing & Support](#-contributing--support)
+- [🚀 Development & Testing](#-development--testing)
+- [📄 License](#-license)
+- [📖 Citation](#-citation)
+
+## ✨ Key Features
+
+- **🔌 Seamless xarray Integration**: Access all features via `.climate_plots`, `.climate_timeseries`, and `.climate_trends` on xarray Datasets.
+- **📈 Temporal Analysis**: Trend detection, STL decomposition, and variability analysis.
+- **🗺️ Spatial Visualization**: Publication-quality maps with Cartopy, custom projections, and area-weighted statistics.
+- **📊 Statistical Diagnostics**: Advanced methods for climate science, including ETCCDI indices.
+- **🔬 Multi-model Analysis**: Compare and evaluate climate model outputs.
+- **⚡ Performance**: Dask-powered parallel processing for large datasets.
+
+## 📦 Installation
 
 ### With pip
 ```bash
@@ -32,7 +49,7 @@ conda activate climate-diagnostics
 pip install -e .
 ```
 
-## Quick Start
+## 🚀 Quick Start
 
 ```python
 import xarray as xr
@@ -48,12 +65,14 @@ ds.climate_plots.plot_mean(variable="air", season="djf")
 ds.climate_trends.calculate_spatial_trends(
     variable="air",
     num_years=10,
-    latitude=slice(40, 6),
+    latitude=slice(40, 60),
     longitude=slice(60, 110)
 )
 ```
 
-## API Overview
+> **💡 Tip**: Check out the [Quick Start Guide](https://pranay-chakraborty.github.io/climate_diagnostics/quickstart.html) for a complete walkthrough!
+
+## 🔧 API Overview
 
 ### Accessors
 
@@ -64,7 +83,7 @@ ds.climate_trends.calculate_spatial_trends(
 ### Example: Time Series
 ```python
 ds.climate_timeseries.plot_time_series(
-    latitude=slice(40, 6),
+    latitude=slice(40, 60),
     longitude=slice(60, 110),
     level=850,
     variable="air",
@@ -77,22 +96,37 @@ ds.climate_timeseries.plot_time_series(
 ds.climate_plots.plot_consecutive_wet_days(
     variable="prate",
     threshold=1.0,
-    latitude=slice(40, 6),
+    latitude=slice(40, 60),
     longitude=slice(60, 110)
 )
 ```
 
-## Documentation
+## 📚 Documentation
 
-Full API documentation and usage examples are available in the [`docs/`](docs/) folder. To build and view locally:
+**📖 [Complete Documentation](https://pranay-chakraborty.github.io/climate_diagnostics/)**
+
+- **[Quick Start Guide](https://pranay-chakraborty.github.io/climate_diagnostics/quickstart.html)** - Get started in minutes
+- **[API Reference](https://pranay-chakraborty.github.io/climate_diagnostics/api/)** - Complete function documentation
+- **[User Guide](https://pranay-chakraborty.github.io/climate_diagnostics/user_guide/)** - In-depth tutorials
+- **[Examples](https://pranay-chakraborty.github.io/climate_diagnostics/examples/)** - Real-world usage examples
+
+### Local Documentation Build
+
+To build and view documentation locally:
 
 ```bash
 cd docs
 make html
-# Then open _build/html/index.html in your browser
+# Open build/html/index.html in your browser
 ```
 
-## Development & Testing
+## 🤝 Contributing & Support
+
+- **🐛 [Report Issues](https://github.com/pranay-chakraborty/climate_diagnostics/issues)** - Bug reports and feature requests
+- **💬 [Discussions](https://github.com/pranay-chakraborty/climate_diagnostics/discussions)** - Questions and community support
+- **📖 [Contributing Guide](https://pranay-chakraborty.github.io/climate_diagnostics/contributing.html)** - How to contribute
+
+## 🚀 Development & Testing
 
 ```bash
 git clone https://github.com/pranay-chakraborty/climate_diagnostics.git
@@ -103,11 +137,11 @@ pip install -e ".[dev]"
 pytest
 ```
 
-## License
+## 📄 License
 
 This project is licensed under the [MIT LICENSE](LICENSE).
 
-## Citation
+## 📖 Citation
 
 If you use Climate Diagnostics Toolkit in your research, please cite:
 
@@ -128,3 +162,15 @@ For LaTeX users:
   note = {[Computer software]}
 }
 ```
+
+---
+
+<div align="center">
+
+**📚 [Documentation](https://pranay-chakraborty.github.io/climate_diagnostics/) | 🐛 [Issues](https://github.com/pranay-chakraborty/climate_diagnostics/issues) | 💬 [Discussions](https://github.com/pranay-chakraborty/climate_diagnostics/discussions)**
+
+Made with ❤️ for the climate science community
+
+![WeCLiMb Logo](https://pranay-chakraborty.github.io/climate_diagnostics/_static/WeCLiMb_LOGO_1.png)
+
+</div>
