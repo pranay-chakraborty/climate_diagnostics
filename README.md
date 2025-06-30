@@ -1,3 +1,4 @@
+
 # Climate Diagnostics Toolkit
 
 ![Python Version](https://img.shields.io/badge/python-3.11+-blue.svg)
@@ -6,191 +7,105 @@
 ![Status](https://img.shields.io/badge/status-alpha-orange.svg)
 [![PyPI version](https://img.shields.io/pypi/v/climate_diagnostics.svg)](https://pypi.org/project/climate_diagnostics/)
 
+A comprehensive Python toolkit for analyzing, processing, and visualizing climate data from model output, reanalysis, and observations. Built on xarray, it provides specialized accessors for time series, trends, and spatial diagnostics, with robust support for parallel processing and publication-quality figures.
 
+## Key Features
 
-A Python package for analyzing and visualizing climate data from NetCDF files with a focus on time series and trend analysis, and spatial pattern visualization, integrated directly with xarray via accessors.
-
-## Overview
-
-The Climate Diagnostics Toolkit provides powerful tools to process, analyze, and visualize climate data using xarray accessors. The package offers functionality for seasonal filtering, spatial averaging with proper area weighting, trend analysis, time series decomposition, and the calculation of standard climate indices to help climate scientists extract meaningful insights from large climate datasets directly from their xarray Dataset objects.
-
-## Features
-
-* **Data Loading and Processing**:
-  * Load NetCDF climate data files using `xarray.open_dataset`.
-  * Access toolkit functions via `.climate_timeseries`, `.climate_trends`, and `.climate_plots` accessors on xarray Datasets.
-  * Filter data by meteorological seasons (Annual, DJF, MAM, JJAS, etc.) using accessor methods.
-  * Select data by latitude, longitude, level, and time range.
-
-* **Time Series Analysis (via `.climate_timeseries`)**:
-  * Plot time series with proper area weighting to account for grid cell size differences.
-  * Calculate and visualize spatial standard deviations over time.
-  * Decompose time series into trend, seasonal, and residual components using STL.
-  * **Calculate and plot time series of climate indices** such as Consecutive Wet/Dry Days (CWD/CDD), precipitation anomalies, and extreme event counts.
-
-* **Trend Analysis (via `.climate_trends`)**:
-  * Calculate and visualize spatially averaged trends with statistical significance testing.
-  * Compute and plot spatial maps of trends per grid point using STL decomposition and parallel processing with Dask.
-
-* **Visualization (via `.climate_plots`)**:
-  * Generate spatial maps of means, standard deviations, and percentiles using Cartopy.
-  * **Plot spatial maps of ETCCDI-style climate indices** like Rx1day, Rx5day, CWD, CDD, and spell duration indices (WSDI/DSDI).
-  * Create publication-quality figures with map projections.
-  * Optionally smooth spatial plots using Gaussian filters.
-  * Option to plot data only over land.
+- **Seamless xarray Integration**: Access all features via `.climate_plots`, `.climate_timeseries`, and `.climate_trends` on xarray Datasets.
+- **Temporal Analysis**: Trend detection, STL decomposition, and variability analysis.
+- **Spatial Visualization**: Publication-quality maps with Cartopy, custom projections, and area-weighted statistics.
+- **Statistical Diagnostics**: Advanced methods for climate science, including ETCCDI indices.
+- **Multi-model Analysis**: Compare and evaluate climate model outputs.
+- **Performance**: Dask-powered parallel processing for large datasets.
 
 ## Installation
 
-### Via pip (recommended)
+### With pip
 ```bash
 pip install climate-diagnostics
 ```
 
-### From Source
+### With conda (recommended for all dependencies)
 ```bash
-git clone https://github.com/pranay-chakraborty/climate_diagnostics_toolkit.git 
-cd climate_diagnostics_toolkit
+conda env create -f environment.yml
+conda activate climate-diagnostics
 pip install -e .
 ```
 
-## Usage Examples
+## Quick Start
 
-### Loading Data and Plotting Time Series
 ```python
 import xarray as xr
 from climate_diagnostics import accessors
 
-# Load data using xarray
-ds = xr.open_dataset("path/to/climate_data.nc")
+# Open a dataset
+ds = xr.open_dataset("/path/to/air.mon.mean.nc")
 
-# Plot time series for a specific region and season using the accessor, given a 3D dataset
+# Plot a mean map
+ds.climate_plots.plot_mean(variable="air", season="djf")
+
+# Analyze trends
+ds.climate_trends.calculate_spatial_trends(
+    variable="air",
+    num_years=10,
+    latitude=slice(40, 6),
+    longitude=slice(60, 110)
+)
+```
+
+## API Overview
+
+### Accessors
+
+- `climate_plots`: Geographic and statistical visualizations
+- `climate_timeseries`: Time series analysis and decomposition
+- `climate_trends`: Trend calculation and significance testing
+
+### Example: Time Series
+```python
 ds.climate_timeseries.plot_time_series(
     latitude=slice(40, 6),
-    longitude=slice(60,110 ),
-    level=850,  # hPa pressure level
+    longitude=slice(60, 110),
+    level=850,
     variable="air",
-    season="jjas"  # June-July-August-September
+    season="jjas"
 )
 ```
 
-### Analyzing Trends
+### Example: Climate Indices
 ```python
-import xarray as xr
-from climate_diagnostics import accessors
-
-# Load data
-ds = xr.open_dataset("path/to/climate_data.nc")
-
-# Calculate and visualize trends with area-weighted averaging using the accessor
-results = ds.climate_trends.calculate_trend(
-    variable="air",
-    latitude=slice(40, 6),
-    longitude=slice(60,110 ),
-    level=850,
-    season="annual",
-    area_weighted=True,
-    plot=True,
-    return_results=True
-)
-
-# Access trend statistics if return_results=True
-if results:
-    trend_stats = results['trend_statistics']
-    slope = trend_stats.loc[trend_stats['statistic'] == 'slope', 'value'].item()
-    p_value = trend_stats.loc[trend_stats['statistic'] == 'p_value', 'value'].item()
-    print(f"Trend slope: {slope}")
-    print(f"P-value: {p_value}")
-
-# Calculate and plot spatial trends per decade
-spatial_trends = ds.climate_trends.calculate_spatial_trends(
-    variable="air",
-    level=850,
-    season="annual",
-    num_years=10,  # Trend per decade
-    plot_map=True,
-    n_workers=8,
-    latitude = slice(40,6),
-    longitude = slice(60,110)
-)
-```
-
-### Creating Spatial Maps
-```python
-import xarray as xr
-from climate_diagnostics import accessors
-
-# Load data
-ds = xr.open_dataset("path/to/climate_data.nc")
-
-# Plot mean of a variable using the accessor
-ds.climate_plots.plot_mean(
-    variable="air",
-    level=850,
-    season="djf",  # December-January-February
-    latitude = slice(40,6),
-    longitude = slice(60,110)
-)
-```
-
-### Plotting Climate Indices
-```python
-import xarray as xr
-from climate_diagnostics import accessors
-
-# Load data
-ds = xr.open_dataset("path/to/precipitation_data.nc") # Assumes daily data
-
-# Plot the mean annual maximum number of consecutive wet days (CWD)
-# A "wet day" is defined here as a day with precipitation >= 1.0 mm/day.
 ds.climate_plots.plot_consecutive_wet_days(
     variable="prate",
     threshold=1.0,
     latitude=slice(40, 6),
     longitude=slice(60, 110)
 )
-
-# Plot the mean annual maximum 5-day precipitation total (Rx5day)
-ds.climate_plots.plot_rx5day(
-    variable="prate",
-    latitude=slice(40, 6),
-    longitude=slice(60, 110)
-)
 ```
 
+## Documentation
 
-## Dependencies
-
-- xarray
-- dask
-- netCDF4
-- bottleneck
-- matplotlib
-- numpy
-- scipy
-- cartopy
-- statsmodels
-- scikit-learn
-
-## Development
-
-### Setting up the development environment
+Full API documentation and usage examples are available in the [`docs/`](docs/) folder. To build and view locally:
 
 ```bash
-git clone https://github.com/pranay-chakraborty/climate_diagnostics.git 
+cd docs
+make html
+# Then open _build/html/index.html in your browser
+```
+
+## Development & Testing
+
+```bash
+git clone https://github.com/pranay-chakraborty/climate_diagnostics.git
 cd climate_diagnostics
 conda env create -f environment.yml
 conda activate climate-diagnostics
 pip install -e ".[dev]"
-```
-### Running Tests
-
-```bash
 pytest
 ```
 
 ## License
 
-[MIT LICENSE](LICENSE)
+This project is licensed under the [MIT LICENSE](LICENSE).
 
 ## Citation
 

@@ -1,0 +1,160 @@
+/* Custom CSS for Climate Diagnostics Toolkit Documentation */
+
+/* Enhanced code blocks */
+.highlight {
+    border-radius: 8px;
+    border: 1px solid var(--color-background-border);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* Beautiful admonitions */
+.admonition {
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    margin: 1.5em 0;
+}
+
+.admonition.note {
+    border-left: 4px solid #3498db;
+}
+
+.admonition.warning {
+    border-left: 4px solid #f39c12;
+}
+
+.admonition.tip {
+    border-left: 4px solid #27ae60;
+}
+
+/* Enhanced tables */
+table.docutils {
+    border-collapse: collapse;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    margin: 1.5em 0;
+}
+
+table.docutils th {
+    background: var(--color-brand-primary);
+    color: white;
+    font-weight: 600;
+    padding: 12px;
+}
+
+table.docutils td {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--color-background-border);
+}
+
+/* Enhanced API documentation */
+.sig-name {
+    font-weight: 600;
+    color: var(--color-brand-primary);
+}
+
+.py.class > .sig {
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    border-radius: 6px;
+    padding: 12px;
+    margin: 8px 0;
+}
+
+.py.method > .sig {
+    background: rgba(52, 152, 219, 0.05);
+    border-left: 3px solid var(--color-brand-primary);
+    border-radius: 4px;
+    padding: 8px 12px;
+    margin: 6px 0;
+}
+
+/* Gallery-style images */
+.figure {
+    text-align: center;
+    margin: 2em 0;
+}
+
+.figure img {
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    max-width: 100%;
+    height: auto;
+}
+
+/* Enhanced navigation */
+.sidebar-brand {
+    font-weight: 700;
+    font-size: 1.2em;
+}
+
+/* Custom climate-themed colors */
+:root {
+    --climate-blue: #0f4c81;
+    --climate-light-blue: #3498db;
+    --climate-green: #27ae60;
+    --climate-orange: #f39c12;
+    --climate-red: #e74c3c;
+}
+
+/* Header enhancements */
+h1, h2, h3 {
+    color: var(--color-brand-primary);
+}
+
+h1 {
+    border-bottom: 3px solid var(--color-brand-primary);
+    padding-bottom: 0.5em;
+}
+
+/* Code highlighting improvements */
+.highlight .k { color: #d73a49; font-weight: 600; }  /* Keywords */
+.highlight .s { color: #032f62; }  /* Strings */
+.highlight .nb { color: #005cc5; }  /* Built-ins */
+.highlight .nf { color: #6f42c1; }  /* Functions */
+
+/* Responsive improvements */
+@media (max-width: 768px) {
+    .figure img {
+        margin: 0 auto;
+        display: block;
+    }
+    
+    table.docutils {
+        font-size: 0.9em;
+    }
+    
+    .highlight {
+        font-size: 0.85em;
+    }
+}
+
+/* Loading animation for images */
+img {
+    transition: opacity 0.3s ease;
+}
+
+/* Enhanced search results */
+.search-results .context {
+    background: rgba(52, 152, 219, 0.1);
+    border-radius: 4px;
+    padding: 8px;
+    margin: 4px 0;
+}
+
+/* Better spacing for content */
+.content {
+    line-height: 1.7;
+}
+
+/* Enhanced buttons */
+.btn {
+    border-radius: 6px;
+    padding: 8px 16px;
+    font-weight: 500;
+    transition: all 0.3s ease;
+}
+
+.btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}

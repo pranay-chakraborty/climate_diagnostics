@@ -1,0 +1,442 @@
+name: Documentation
+
+on:
+  push:
+    branches: [ main, master, develop ]
+    paths:
+      - 'docs/**'
+      - 'src/**'
+      - '.github/workflows/docs.yml'
+      - 'pyproject.toml'
+      - 'setup.py'
+      - 'environment.yml'
+  pull_request:
+    branches: [ main, master ]
+    paths:
+      - 'docs/**'
+      - 'src/**'
+      - '.github/workflows/docs.yml'
+      - 'pyproject.toml'
+      - 'setup.py'
+      - 'environment.yml'
+  workflow_dispatch:
+  schedule:
+    # Run weekly to catch documentation issues early
+    - cron: '0 2 * * 1'
+
+env:
+  PYTHON_VERSION: '3.11'
+  NODE_VERSION: '18'
+
+jobs:
+  # Build and test documentation
+  build-docs:
+    name: Build Documentation
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Full history for proper version detection
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        cache: 'pip'
+    
+    - name: Set up Conda
+      uses: conda-incubator/setup-miniconda@v3
+      with:
+        auto-update-conda: true
+        python-version: ${{ env.PYTHON_VERSION }}
+        environment-file: environment.yml
+        activate-environment: climate_diagnostics
+        auto-activate-base: false
+    
+    - name: Install package in development mode
+      shell: bash -l {0}
+      run: |
+        pip install -e .
+        # Install documentation requirements if available
+        if [ -f docs/requirements.txt ]; then
+          pip install -r docs/requirements.txt
+        else
+          pip install sphinx sphinx-rtd-theme sphinx-autoapi nbsphinx jupyter
+        fi
+    
+    - name: Validate package installation
+      shell: bash -l {0}
+      run: |
+        python -c "import climate_diagnostics; print('Package imported successfully')"
+        python -c "import climate_diagnostics.plots; print('Plots module imported')"
+        python -c "import climate_diagnostics.TimeSeries; print('TimeSeries module imported')"
+        python -c "import climate_diagnostics.utils; print('Utils module imported')"
+        python -c "import climate_diagnostics.models; print('Models module imported')"
+    
+    - name: Check Sphinx configuration
+      shell: bash -l {0}
+      working-directory: docs
+      run: |
+        python -c "
+        import sys
+        sys.path.insert(0, 'source')
+        import conf
+        print(f'Sphinx project: {conf.project}')
+        print(f'Sphinx version: {conf.version}')
+        print(f'Extensions: {conf.extensions}')
+        "
+    
+    - name: Build documentation
+      shell: bash -l {0}
+      working-directory: docs
+      run: |
+        # Clean previous builds
+        make clean
+        
+        # Build HTML documentation with detailed output
+        make html SPHINXOPTS="-W --keep-going -j auto"
+    
+    - name: Check for broken links
+      shell: bash -l {0}
+      working-directory: docs
+      run: |
+        # Build linkcheck to verify external links
+        make linkcheck || echo "Link check completed with warnings"
+    
+    - name: Validate HTML structure
+      run: |
+        # Check that essential files were created
+        test -f docs/build/html/index.html || exit 1
+        test -f docs/build/html/api/index.html || exit 1
+        test -f docs/build/html/quickstart.html || exit 1
+        
+        # Check for common issues
+        if grep -r "WARNING" docs/build/html/_static/; then
+          echo "Found warnings in built documentation"
+        fi
+        
+        # Verify logo integration
+        test -f docs/build/html/_static/WeCLiMb_LOGO_1.png || echo "Logo not found"
+    
+    - name: Archive documentation artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: documentation-html
+        path: docs/build/html/
+        retention-days: 30
+    
+    - name: Archive build logs
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: sphinx-build-logs
+        path: |
+          docs/build/doctrees/
+          docs/build/*.log
+        retention-days: 7
+
+  # Test documentation examples
+  test-examples:
+    name: Test Documentation Examples
+    runs-on: ubuntu-latest
+    needs: build-docs
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+    
+    - name: Set up Conda
+      uses: conda-incubator/setup-miniconda@v3
+      with:
+        auto-update-conda: true
+        python-version: ${{ env.PYTHON_VERSION }}
+        environment-file: environment.yml
+        activate-environment: climate_diagnostics
+        auto-activate-base: false
+    
+    - name: Install package
+      shell: bash -l {0}
+      run: pip install -e .
+    
+    - name: Test basic imports from examples
+      shell: bash -l {0}
+      run: |
+        python -c "
+        # Test basic imports that appear in documentation
+        import xarray as xr
+        import climate_diagnostics
+        import matplotlib.pyplot as plt
+        import numpy as np
+        
+        print('All basic imports successful')
+        
+        # Test accessor registration
+        ds = xr.Dataset()
+        assert hasattr(ds, 'climate_plots'), 'climate_plots accessor not registered'
+        assert hasattr(ds, 'climate_timeseries'), 'climate_timeseries accessor not registered' 
+        assert hasattr(ds, 'climate_trends'), 'climate_trends accessor not registered'
+        
+        print('All accessors registered successfully')
+        "
+    
+    - name: Generate test data for examples
+      shell: bash -l {0}
+      run: |
+        python -c "
+        import xarray as xr
+        import numpy as np
+        
+        # Create synthetic test data similar to documentation examples
+        time = np.arange('2000-01', '2010-01', dtype='datetime64[M]')
+        lat = np.linspace(-90, 90, 36)
+        lon = np.linspace(-180, 180, 72)
+        
+        # Create temperature data with trend
+        np.random.seed(42)
+        temp_data = np.random.randn(len(time), len(lat), len(lon)) + 273.15
+        
+        # Add a warming trend
+        for i, t in enumerate(time):
+            temp_data[i] += i * 0.01  # Small warming trend
+        
+        ds = xr.Dataset({
+            'air': (['time', 'lat', 'lon'], temp_data)
+        }, coords={
+            'time': time,
+            'lat': lat, 
+            'lon': lon
+        })
+        
+        ds.to_netcdf('test_temperature_data.nc')
+        print('Test data generated successfully')
+        "
+
+  # Spell check and accessibility
+  quality-checks:
+    name: Documentation Quality Checks
+    runs-on: ubuntu-latest
+    needs: build-docs
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Download built documentation
+      uses: actions/download-artifact@v4
+      with:
+        name: documentation-html
+        path: docs/build/html/
+    
+    - name: Set up Node.js for accessibility testing
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+    
+    - name: Install accessibility testing tools
+      run: |
+        npm install -g @axe-core/cli
+    
+    - name: Check spelling in documentation
+      run: |
+        # Install aspell for spell checking
+        sudo apt-get update
+        sudo apt-get install -y aspell aspell-en
+        
+        # Create custom word list for technical terms
+        cat > .aspell.en.pws << EOF
+        personal_ws-1.1 en 50
+        xarray
+        Dataset
+        numpy
+        matplotlib
+        pyplot
+        WeCLiMb
+        TimeSeries
+        STL
+        autocorrelation
+        conda
+        pyproject
+        Github
+        API
+        accessor
+        accessors
+        coord
+        utils
+        dask
+        netcdf
+        EOF
+        
+        # Check spelling in RST files (excluding build directory)
+        find docs/source -name "*.rst" -exec aspell --personal=.aspell.en.pws --mode=sgml list {} \; | sort -u > spelling_errors.txt
+        
+        if [ -s spelling_errors.txt ]; then
+          echo "Spelling errors found:"
+          cat spelling_errors.txt
+          echo "::warning::Spelling errors detected in documentation"
+        else
+          echo "No spelling errors found"
+        fi
+    
+    - name: Run accessibility checks
+      run: |
+        # Start a simple HTTP server to serve the documentation
+        cd docs/build/html
+        python -m http.server 8000 &
+        SERVER_PID=$!
+        sleep 5
+        
+        # Run accessibility checks on key pages
+        axe http://localhost:8000 --save accessibility-index.json || echo "Accessibility issues found on index"
+        axe http://localhost:8000/quickstart.html --save accessibility-quickstart.json || echo "Accessibility issues found on quickstart"
+        axe http://localhost:8000/api/ --save accessibility-api.json || echo "Accessibility issues found on API docs"
+        
+        # Stop the server
+        kill $SERVER_PID
+        
+        echo "Accessibility checks completed"
+    
+    - name: Archive quality check results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: quality-check-results
+        path: |
+          spelling_errors.txt
+          accessibility-*.json
+        retention-days: 7
+
+  # Documentation metrics and analysis
+  doc-metrics:
+    name: Documentation Metrics
+    runs-on: ubuntu-latest
+    needs: build-docs
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Download built documentation
+      uses: actions/download-artifact@v4
+      with:
+        name: documentation-html
+        path: docs/build/html/
+    
+    - name: Calculate documentation metrics
+      run: |
+        echo "# Documentation Metrics Report" > doc_metrics.md
+        echo "" >> doc_metrics.md
+        
+        # Count pages
+        html_files=$(find docs/build/html -name "*.html" | wc -l)
+        echo "- Total HTML pages: $html_files" >> doc_metrics.md
+        
+        # Count source files
+        rst_files=$(find docs/source -name "*.rst" | wc -l)
+        echo "- Total RST source files: $rst_files" >> doc_metrics.md
+        
+        # Calculate total documentation size
+        total_size=$(du -sh docs/build/html | cut -f1)
+        echo "- Total documentation size: $total_size" >> doc_metrics.md
+        
+        # Count images
+        images=$(find docs/build/html -name "*.png" -o -name "*.jpg" -o -name "*.gif" | wc -l)
+        echo "- Total images: $images" >> doc_metrics.md
+        
+        # Check for API documentation coverage
+        api_files=$(find docs/build/html/api -name "*.html" 2>/dev/null | wc -l)
+        echo "- API documentation pages: $api_files" >> doc_metrics.md
+        
+        echo "" >> doc_metrics.md
+        echo "## Build Information" >> doc_metrics.md
+        echo "- Build date: $(date)" >> doc_metrics.md
+        echo "- Git commit: $GITHUB_SHA" >> doc_metrics.md
+        echo "- Git ref: $GITHUB_REF" >> doc_metrics.md
+        
+        cat doc_metrics.md
+    
+    - name: Archive metrics report
+      uses: actions/upload-artifact@v4
+      with:
+        name: documentation-metrics
+        path: doc_metrics.md
+        retention-days: 30
+
+  # Deploy to GitHub Pages (only on main branch)
+  deploy:
+    name: Deploy to GitHub Pages
+    runs-on: ubuntu-latest
+    needs: [build-docs, test-examples, quality-checks]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    
+    steps:
+    - name: Download built documentation
+      uses: actions/download-artifact@v4
+      with:
+        name: documentation-html
+        path: docs/build/html/
+    
+    - name: Setup Pages
+      uses: actions/configure-pages@v4
+    
+    - name: Upload to GitHub Pages
+      uses: actions/upload-pages-artifact@v3
+      with:
+        path: docs/build/html/
+    
+    - name: Deploy to GitHub Pages
+      id: deployment
+      uses: actions/deploy-pages@v4
+
+  # Notification job
+  notify:
+    name: Notify Results
+    runs-on: ubuntu-latest
+    needs: [build-docs, test-examples, quality-checks, doc-metrics]
+    if: always()
+    
+    steps:
+    - name: Create status summary
+      run: |
+        echo "# Documentation Build Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "| Job | Status |" >> $GITHUB_STEP_SUMMARY
+        echo "|-----|--------|" >> $GITHUB_STEP_SUMMARY
+        echo "| Build Docs | ${{ needs.build-docs.result }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Test Examples | ${{ needs.test-examples.result }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Quality Checks | ${{ needs.quality-checks.result }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Doc Metrics | ${{ needs.doc-metrics.result }} |" >> $GITHUB_STEP_SUMMARY
+        
+        if [ "${{ github.ref }}" = "refs/heads/main" ] && [ "${{ github.event_name }}" = "push" ]; then
+          echo "| Deploy | ${{ needs.deploy.result || 'skipped' }} |" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "## Artifacts Generated" >> $GITHUB_STEP_SUMMARY
+        echo "- 📚 Documentation HTML" >> $GITHUB_STEP_SUMMARY
+        echo "- 📊 Quality Check Results" >> $GITHUB_STEP_SUMMARY
+        echo "- 📈 Documentation Metrics" >> $GITHUB_STEP_SUMMARY
+        echo "- 🔍 Sphinx Build Logs" >> $GITHUB_STEP_SUMMARY
+        
+        if [ "${{ needs.build-docs.result }}" = "success" ]; then
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Documentation built successfully!" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "❌ Documentation build failed. Check the logs for details." >> $GITHUB_STEP_SUMMARY
+        fi
