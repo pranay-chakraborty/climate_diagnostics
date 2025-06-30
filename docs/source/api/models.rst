@@ -19,9 +19,10 @@ RCE Module
    :undoc-members:
 
 Available Functions
-==================
+===================
 
 .. autofunction:: climate_diagnostics.models.rce.create_rce_model
+   :no-index:
 
 Basic Example
 =============

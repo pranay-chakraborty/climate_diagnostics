@@ -5,7 +5,7 @@ Installation
 This guide covers the installation of the Climate Diagnostics Toolkit and its dependencies.
 
 Prerequisites
-============
+=============
 
 The Climate Diagnostics Toolkit requires:
 
@@ -72,7 +72,7 @@ If you prefer pip, ensure you have the required system dependencies for Cartopy:
    pip install climate-diagnostics
 
 Development Installation
-=======================
+========================
 
 For development work:
 
@@ -103,7 +103,7 @@ For development work:
    pre-commit install
 
 Verification
-===========
+============
 
 Test your installation:
 
@@ -120,7 +120,7 @@ Test your installation:
    print("✅ Installation successful!")
 
 Optional Dependencies
-====================
+=====================
 
 Additional packages for enhanced functionality:
 
@@ -143,10 +143,10 @@ Additional packages for enhanced functionality:
    conda install scikit-learn statsmodels
 
 Troubleshooting
-==============
+===============
 
 Common Issues
-------------
+-------------
 
 **Cartopy installation fails:**
    Use conda instead of pip for Cartopy and its dependencies.
@@ -161,7 +161,7 @@ Common Issues
    Set the matplotlib backend: ``export MPLBACKEND=Agg``
 
 Getting Help
------------
+------------
 
 If you encounter issues:
 
@@ -173,7 +173,7 @@ If you encounter issues:
    - Minimal example to reproduce the issue
 
 System Requirements
-==================
+===================
 
 **Minimum:**
 - Python 3.11+

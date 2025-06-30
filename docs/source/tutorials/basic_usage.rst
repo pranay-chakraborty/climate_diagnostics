@@ -93,7 +93,7 @@ Extract and plot a time series:
    )
 
 📊 **Trend Analysis**
-====================
+======================
 
 Calculate and visualize trends:
 
@@ -109,7 +109,7 @@ Calculate and visualize trends:
    print(f"Temperature trend: {trend.values:.3f} units/year")
 
 🎯 **Key Concepts**
-==================
+====================
 
 .. note::
    **xarray Integration**: All toolkit features are accessed through xarray accessor methods (.climate_plots, .climate_timeseries, .climate_trends)
@@ -121,16 +121,15 @@ Calculate and visualize trends:
    **Memory Management**: For large datasets, consider using Dask arrays or chunking your data.
 
 🔄 **Next Steps**
-================
+==================
 
 Now that you've learned the basics, you're ready to:
 
-- :doc:`plotting_guide` - Learn advanced plotting techniques
-- :doc:`time_series_analysis` - Dive deeper into temporal analysis
-- :doc:`trend_detection` - Master trend calculation methods
+- :doc:`../user_guide/plotting` - Learn advanced plotting techniques
+- :doc:`../api/index` - Explore the complete API reference
 
 💡 **Common Patterns**
-=====================
+=======================
 
 Here are some common usage patterns you'll use frequently:
 

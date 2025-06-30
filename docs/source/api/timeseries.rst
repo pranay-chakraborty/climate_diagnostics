@@ -38,22 +38,25 @@ Accessor Class
    :show-inheritance:
 
 Available Methods
-================
+=================
 
 Time Series Plotting
--------------------
-
-.. automethod:: climate_diagnostics.TimeSeries.TimeSeries.TimeSeriesAccessor.plot_time_series
-
-Statistical Analysis
--------------------
-
-.. automethod:: climate_diagnostics.TimeSeries.TimeSeries.TimeSeriesAccessor.plot_std_space
-
-Decomposition Methods
 --------------------
 
+.. automethod:: climate_diagnostics.TimeSeries.TimeSeries.TimeSeriesAccessor.plot_time_series
+   :no-index:
+
+Statistical Analysis
+--------------------
+
+.. automethod:: climate_diagnostics.TimeSeries.TimeSeries.TimeSeriesAccessor.plot_std_space
+   :no-index:
+
+Decomposition Methods
+---------------------
+
 .. automethod:: climate_diagnostics.TimeSeries.TimeSeries.TimeSeriesAccessor.decompose_time_series
+   :no-index:
 
 Basic Examples
 ==============
@@ -70,7 +73,7 @@ Simple Time Series Plot
    )
 
 Regional Time Series
--------------------
+--------------------
 
 .. code-block:: python
 
@@ -93,7 +96,7 @@ Time Series Decomposition
    )
 
 Spatial Statistics
------------------
+------------------
 
 .. code-block:: python
 
@@ -103,7 +106,7 @@ Spatial Statistics
    )
 
 Working with Regional Data
-=========================
+==========================
 
 .. code-block:: python
 

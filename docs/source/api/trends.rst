@@ -38,17 +38,19 @@ Accessor Class
    :show-inheritance:
 
 Available Methods
-================
+=================
 
 Trend Calculation
-----------------
+-----------------
 
 .. automethod:: climate_diagnostics.TimeSeries.Trends.TrendsAccessor.calculate_trend
+   :no-index:
 
 Spatial Trend Analysis
----------------------
+----------------------
 
 .. automethod:: climate_diagnostics.TimeSeries.Trends.TrendsAccessor.calculate_spatial_trends
+   :no-index:
 
 Basic Examples
 ==============

@@ -57,7 +57,7 @@ All notable changes to the Climate Diagnostics Toolkit will be documented here.
 - Climate index calculations
 
 📋 **Release Notes**
-===================
+=====================
 
 **Upcoming Features (v1.2.0)**
 
@@ -75,7 +75,7 @@ All notable changes to the Climate Diagnostics Toolkit will be documented here.
 - 🤝 Community plugin system
 
 📅 **Release Schedule**
-======================
+========================
 
 We follow semantic versioning (SemVer) and aim for:
 
@@ -93,7 +93,7 @@ Our version numbers follow the format: ``MAJOR.MINOR.PATCH``
 - **PATCH**: Bug fixes (backwards compatible)
 
 📊 **Migration Guides**
-======================
+========================
 
 **Upgrading from v1.0.x to v1.1.x**
 
@@ -117,7 +117,7 @@ No breaking changes! All v1.0 code should work without modification.
 - ``legacy_trend_calc()`` → Use ``calculate_spatial_trends()`` instead
 
 🔗 **Links**
-===========
+=============
 
 - `GitHub Releases <https://github.com/yourusername/climate_diagnostics/releases>`_
 - `PyPI Package <https://pypi.org/project/climate-diagnostics/>`_

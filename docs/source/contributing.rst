@@ -5,7 +5,7 @@ Contributing
 We welcome contributions to the Climate Diagnostics Toolkit! This guide will help you get started.
 
 🤝 **Ways to Contribute**
-========================
+===========================
 
 .. grid:: 2
    :gutter: 3
@@ -47,7 +47,7 @@ We welcome contributions to the Climate Diagnostics Toolkit! This guide will hel
       Submit pull requests with new functionality.
 
 🚀 **Getting Started**
-=====================
+=======================
 
 **1. Fork and Clone**
 
@@ -78,7 +78,7 @@ We welcome contributions to the Climate Diagnostics Toolkit! This guide will hel
    git checkout -b feature/your-feature-name
 
 🧪 **Development Workflow**
-==========================
+============================
 
 **Code Style**
 
@@ -120,7 +120,7 @@ Build documentation locally:
    open build/html/index.html
 
 📝 **Code Guidelines**
-=====================
+=======================
 
 **Python Style**
 
@@ -194,7 +194,7 @@ Build documentation locally:
        assert abs(trend.values - 1.0) < 0.2
 
 📚 **Documentation Standards**
-=============================
+===============================
 
 **Docstring Format**
 
@@ -262,7 +262,7 @@ Include examples in the `examples/` directory:
    plt.show()
 
 🔄 **Pull Request Process**
-==========================
+============================
 
 **1. Prepare Your PR**
 
@@ -310,7 +310,7 @@ Include examples in the `examples/` directory:
    - [ ] Documentation updated
 
 🐛 **Bug Reports**
-=================
+===================
 
 **Good Bug Report Template:**
 
@@ -337,7 +337,7 @@ Include examples in the `examples/` directory:
    Any other relevant information
 
 💬 **Community Guidelines**
-==========================
+============================
 
 - Be respectful and inclusive
 - Help others learn and grow
@@ -346,10 +346,10 @@ Include examples in the `examples/` directory:
 - Follow our Code of Conduct
 
 📧 **Getting Help**
-==================
+====================
 
 - **Questions**: Use GitHub Discussions
-- **Bugs**: Open an issue on GitHub
+- **Bugs**: https://github.com/pranay-chakraborty/climate_diagnostics/issues
 - **Features**: Start a discussion first
 - **Chat**: Join our community channels
 

@@ -5,7 +5,7 @@ Plotting Guide
 Learn to create climate visualizations with the Climate Diagnostics Toolkit.
 
 🎨 **Overview**
-==============
+================
 
 The ``climate_plots`` accessor provides visualization capabilities designed for climate data. All plotting functions integrate with Cartopy for geographic projections and matplotlib for customization.
 
@@ -60,7 +60,7 @@ The ``climate_plots`` accessor provides visualization capabilities designed for 
        )
 
 🎨 **Styling and Customization**
-===============================
+=================================
 
 **Color Schemes**
 
@@ -109,7 +109,7 @@ The ``climate_plots`` accessor provides visualization capabilities designed for 
    )
 
 📊 **Statistical Overlays**
-==========================
+============================
 
 **Significance Testing**
 
@@ -135,7 +135,7 @@ The ``climate_plots`` accessor provides visualization capabilities designed for 
    )
 
 📈 **Multiple Variables**
-========================
+==========================
 
 **Side-by-Side Comparison**
 
@@ -170,7 +170,7 @@ The ``climate_plots`` accessor provides visualization capabilities designed for 
    )
 
 🎯 **Best Practices**
-====================
+======================
 
 .. tip::
    **Choose Appropriate Projections**
@@ -194,7 +194,7 @@ The ``climate_plots`` accessor provides visualization capabilities designed for 
    - Cache processed data when possible
 
 🔧 **Advanced Techniques**
-=========================
+===========================
 
 **Custom Colormaps**
 
@@ -232,7 +232,7 @@ The ``climate_plots`` accessor provides visualization capabilities designed for 
        region_data.climate_plots.plot_mean(ax=ax)
 
 🖼️ **Output Options**
-===================
+=====================
 
 **High-Resolution Output**
 

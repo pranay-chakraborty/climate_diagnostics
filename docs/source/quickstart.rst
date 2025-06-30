@@ -26,7 +26,7 @@ The toolkit extends xarray with three main accessors:
 - ``.climate_trends`` - Trend analysis
 
 First Visualization
-==================
+===================
 
 Create your first climate visualization:
 
@@ -47,7 +47,7 @@ This creates a global map with:
 - Clean styling
 
 Time Series Analysis
-===================
+====================
 
 Extract and analyze time series data:
 
@@ -63,7 +63,7 @@ Extract and analyze time series data:
    plt.show()
 
 Seasonal Analysis
-================
+=================
 
 Analyze seasonal patterns:
 
@@ -87,7 +87,7 @@ Analyze seasonal patterns:
        )
 
 Trend Analysis
-=============
+==============
 
 Calculate and visualize trends:
 
@@ -106,7 +106,7 @@ Calculate and visualize trends:
    print(f"Mean global trend: {trends.mean().values:.4f} K/year")
 
 Time Series Decomposition
-========================
+=========================
 
 Decompose time series into components:
 
@@ -124,10 +124,10 @@ Decompose time series into components:
    plt.show()
 
 Advanced Features
-================
+=================
 
 Regional Statistics
-------------------
+-------------------
 
 Calculate statistics for predefined regions:
 
@@ -157,7 +157,7 @@ Calculate statistics for predefined regions:
    plt.grid(True, alpha=0.3)
 
 Multi-Model Comparison
----------------------
+----------------------
 
 Compare multiple datasets:
 
@@ -185,10 +185,10 @@ Compare multiple datasets:
    plt.grid(True, alpha=0.3)
 
 Best Practices
-=============
+==============
 
 Memory Management
-----------------
+-----------------
 
 For large datasets, use chunking:
 
@@ -201,7 +201,7 @@ For large datasets, use chunking:
    )
 
 Data Preprocessing
------------------
+------------------
 
 Standardize your data:
 
@@ -217,7 +217,7 @@ Standardize your data:
        ds = ds.sel(time=slice("1980", "2020"))
 
 Performance Tips
-===============
+================
 
 1. **Use chunking** for large datasets
 2. **Subset data** before analysis when possible
@@ -242,7 +242,7 @@ Now that you've seen the basics:
 4. **Join the community**: Get help and share your work
 
 Common Patterns
-==============
+===============
 
 Here are some common analysis patterns:
 
@@ -272,9 +272,9 @@ Here are some common analysis patterns:
                        (ds > percentiles.sel(quantile=0.95)))
 
 Need Help?
-=========
+==========
 
 - 📖 **Documentation**: You're reading it!
 - 🐛 **Issues**: `GitHub Issues <https://github.com/yourusername/climate_diagnostics/issues>`_
 - 💬 **Discussions**: `GitHub Discussions <https://github.com/yourusername/climate_diagnostics/discussions>`_
-- 📧 **Email**: support@climate-diagnostics.org
+- � **Issues**: https://github.com/pranay-chakraborty/climate_diagnostics/issues

@@ -5,18 +5,10 @@ Examples
 Real-world examples demonstrating the Climate Diagnostics Toolkit in action.
 
 🌍 **Featured Examples**
-========================
-
-.. toctree::
-   :maxdepth: 2
-
-   basic_plotting
-   trend_analysis  
-   time_series_analysis
-   multi_model_evaluation
+==========================
 
 📊 **Example Categories**
-========================
+==========================
 
 .. grid:: 2
    :gutter: 3
@@ -28,12 +20,7 @@ Real-world examples demonstrating the Climate Diagnostics Toolkit in action.
       
       +++
       
-      .. button-ref:: basic_plotting
-         :expand:
-         :color: primary
-         :click-parent:
-         
-         View Examples
+      Coming soon - basic plotting examples
 
    .. grid-item-card:: 📈 Analysis Examples  
       :text-align: center
@@ -42,12 +29,7 @@ Real-world examples demonstrating the Climate Diagnostics Toolkit in action.
       
       +++
       
-      .. button-ref:: trend_analysis
-         :expand:
-         :color: secondary
-         :click-parent:
-         
-         See Analysis
+      Coming soon - trend analysis examples
 
    .. grid-item-card:: ⏱️ Time Series Examples
       :text-align: center
@@ -56,12 +38,7 @@ Real-world examples demonstrating the Climate Diagnostics Toolkit in action.
       
       +++
       
-      .. button-ref:: time_series_analysis
-         :expand:
-         :color: success
-         :click-parent:
-         
-         Time Series
+      Coming soon - time series examples
 
    .. grid-item-card:: 🔬 Advanced Examples
       :text-align: center
@@ -70,15 +47,10 @@ Real-world examples demonstrating the Climate Diagnostics Toolkit in action.
       
       +++
       
-      .. button-ref:: multi_model_evaluation
-         :expand:
-         :color: info
-         :click-parent:
-         
-         Advanced
+      Coming soon - advanced examples
 
 🎯 **What You'll Find**
-======================
+========================
 
 Each example includes:
 
@@ -89,18 +61,18 @@ Each example includes:
 - Best practices and tips
 
 📁 **Download Examples**
-=======================
+=========================
 
 All examples are available as Jupyter notebooks that you can download and run locally:
 
 .. code-block:: bash
 
-   git clone https://github.com/yourusername/climate_diagnostics.git
+   git clone https://github.com/pranay-chakraborty/climate_diagnostics.git
    cd climate_diagnostics/examples/
    jupyter lab
 
 🔗 **Related Resources**
-=======================
+=========================
 
 - :doc:`../tutorials/index` - Step-by-step learning
 - :doc:`../api/index` - Complete API reference

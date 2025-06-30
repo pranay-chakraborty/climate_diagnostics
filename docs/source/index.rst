@@ -24,7 +24,7 @@ Climate Diagnostics Toolkit
 A Python toolkit for analyzing and visualizing climate data from model output, reanalysis, and observations. Built on xarray, it provides specialized accessors for time series analysis, trend calculation, and spatial plotting.
 
 🌍 **Key Features**
-==================
+====================
 
 ✨ **xarray Integration**
    Access features via ``.climate_plots``, ``.climate_timeseries``, and ``.climate_trends`` accessors on xarray Datasets.
@@ -42,7 +42,7 @@ A Python toolkit for analyzing and visualizing climate data from model output, r
    Process large datasets efficiently with built-in Dask integration.
 
 🚀 **Quick Start**
-=================
+===================
 
 .. code-block:: python
 
@@ -67,7 +67,7 @@ A Python toolkit for analyzing and visualizing climate data from model output, r
    )
 
 📚 **Documentation Contents**
-============================
+==============================
 
 .. toctree::
    :maxdepth: 2
@@ -81,10 +81,13 @@ A Python toolkit for analyzing and visualizing climate data from model output, r
    :maxdepth: 2
    :caption: User Guide
 
-   user_guide/plotting
-   user_guide/time_series
-   user_guide/trends
-   user_guide/advanced
+   user_guide/index
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Examples
+
+   examples/index
 
 .. toctree::
    :maxdepth: 2
@@ -98,12 +101,9 @@ A Python toolkit for analyzing and visualizing climate data from model output, r
 
 .. toctree::
    :maxdepth: 2
-   :caption: Examples
+   :caption: API Reference
 
-   examples/basic_plotting
-   examples/trend_analysis
-   examples/time_series_analysis
-   examples/multi_model_evaluation
+   api/index
 
 .. toctree::
    :maxdepth: 1
@@ -114,7 +114,7 @@ A Python toolkit for analyzing and visualizing climate data from model output, r
    license
 
 🔧 **Installation**
-==================
+====================
 
 **With pip:**
 
@@ -131,7 +131,7 @@ A Python toolkit for analyzing and visualizing climate data from model output, r
    pip install -e .
 
 📖 **Core Modules**
-==================
+====================
 
 .. grid:: 2
    :gutter: 3
@@ -193,7 +193,7 @@ A Python toolkit for analyzing and visualizing climate data from model output, r
          Explore Utils API
 
 💡 **Quick Examples**
-====================
+======================
 
 **Create a Mean Temperature Map:**
 
@@ -234,7 +234,7 @@ A Python toolkit for analyzing and visualizing climate data from model output, r
    )
 
 🤝 **Contributing**
-==================
+====================
 
 We welcome contributions! Please see our `Contributing Guide <contributing.html>`_ for details on:
 
@@ -244,14 +244,14 @@ We welcome contributions! Please see our `Contributing Guide <contributing.html>
 - Submitting pull requests
 
 📧 **Support & Community**
-=========================
+===========================
 
 - **Documentation**: You're reading it! 📚
-- **Issues**: `GitHub Issues <https://github.com/yourusername/climate_diagnostics/issues>`_
-- **Discussions**: `GitHub Discussions <https://github.com/yourusername/climate_diagnostics/discussions>`_
+- **Issues**: `GitHub Issues <https://github.com/pranay-chakraborty/climate_diagnostics/issues>`_
+- **Discussions**: `GitHub Discussions <https://github.com/pranay-chakraborty/climate_diagnostics/discussions>`_
 
 📄 **Citation**
-==============
+================
 
 If you use this toolkit in your research, please cite:
 

@@ -38,35 +38,46 @@ Accessor Class
    :show-inheritance:
 
 Available Plotting Methods
-=========================
+==========================
 
 Basic Statistical Plots
 -----------------------
 
 .. automethod:: climate_diagnostics.plots.plot.PlotsAccessor.plot_mean
+   :no-index:
 
 .. automethod:: climate_diagnostics.plots.plot.PlotsAccessor.plot_std_time
+   :no-index:
 
 .. automethod:: climate_diagnostics.plots.plot.PlotsAccessor.plot_percentile_spatial
+   :no-index:
 
 Precipitation Indices
---------------------
+---------------------
 
 .. automethod:: climate_diagnostics.plots.plot.PlotsAccessor.plot_rx1day
+   :no-index:
 
 .. automethod:: climate_diagnostics.plots.plot.PlotsAccessor.plot_rx5day
+   :no-index:
 
 .. automethod:: climate_diagnostics.plots.plot.PlotsAccessor.plot_wet_spell_duration
+   :no-index:
 
 .. automethod:: climate_diagnostics.plots.plot.PlotsAccessor.plot_dry_spell_duration
+   :no-index:
 
 .. automethod:: climate_diagnostics.plots.plot.PlotsAccessor.plot_consecutive_wet_days
+   :no-index:
 
 .. automethod:: climate_diagnostics.plots.plot.PlotsAccessor.plot_consecutive_dry_days
+   :no-index:
 
 .. automethod:: climate_diagnostics.plots.plot.PlotsAccessor.plot_precipitation_above_threshold
+   :no-index:
 
 .. automethod:: climate_diagnostics.plots.plot.PlotsAccessor.plot_annual_sum_mean
+   :no-index:
 
 Basic Examples
 ==============
@@ -89,7 +100,7 @@ Temperature Plots
    )
 
 Precipitation Analysis
----------------------
+----------------------
 
 .. code-block:: python
 
@@ -106,7 +117,7 @@ Precipitation Analysis
    )
 
 Regional Focus
--------------
+--------------
 
 .. code-block:: python
 
@@ -119,7 +130,7 @@ Regional Focus
    )
 
 Customization Options
-====================
+=====================
 
 .. code-block:: python
 
@@ -134,7 +145,7 @@ Customization Options
    )
 
 Working with Different Variables
-===============================
+================================
 
 .. code-block:: python
 

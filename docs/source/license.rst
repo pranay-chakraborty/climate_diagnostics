@@ -28,7 +28,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 🔓 **What This Means**
-=====================
+=======================
 
 The MIT License is a permissive license that allows you to:
 
@@ -94,7 +94,7 @@ The complete license text is also available in the `LICENSE` file in the project
    SOFTWARE.
 
 🔗 **References**
-================
+==================
 
 - `MIT License on OSI <https://opensource.org/licenses/MIT>`_
 - `Choose a License Guide <https://choosealicense.com/licenses/mit/>`_

@@ -15,10 +15,10 @@ The utilities include:
 - Dask client management
 
 Available Functions
-==================
+===================
 
 Coordinate Utilities
-===================
+====================
 
 .. automodule:: climate_diagnostics.utils.coord_utils
    :members:
@@ -82,7 +82,7 @@ Data Selection
    )
 
 Seasonal Filtering
------------------
+------------------
 
 .. code-block:: python
 
@@ -93,7 +93,7 @@ Seasonal Filtering
    winter_data = filter_by_season(ds, season="djf")
 
 Practical Usage
-==============
+===============
 
 Complete Analysis Workflow
 --------------------------

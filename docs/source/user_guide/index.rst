@@ -11,12 +11,9 @@ Comprehensive documentation for using the Climate Diagnostics Toolkit effectivel
    :maxdepth: 2
 
    plotting
-   time_series
-   trends
-   advanced
 
 🎯 **What's Covered**
-====================
+======================
 
 .. grid:: 2
    :gutter: 3
@@ -42,12 +39,7 @@ Comprehensive documentation for using the Climate Diagnostics Toolkit effectivel
       
       +++
       
-      .. button-ref:: time_series
-         :expand:
-         :color: secondary
-         :click-parent:
-         
-         Time Series
+      See :doc:`../api/timeseries` for API reference
 
    .. grid-item-card:: 📊 Trends Guide
       :text-align: center
@@ -56,12 +48,7 @@ Comprehensive documentation for using the Climate Diagnostics Toolkit effectivel
       
       +++
       
-      .. button-ref:: trends
-         :expand:
-         :color: success
-         :click-parent:
-         
-         Trend Analysis
+      See :doc:`../api/trends` for API reference
 
    .. grid-item-card:: 🔬 Advanced Guide
       :text-align: center
@@ -70,9 +57,4 @@ Comprehensive documentation for using the Climate Diagnostics Toolkit effectivel
       
       +++
       
-      .. button-ref:: advanced
-         :expand:
-         :color: info
-         :click-parent:
-         
-         Advanced Topics
+      Coming soon - advanced guides
