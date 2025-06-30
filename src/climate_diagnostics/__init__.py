@@ -38,7 +38,7 @@ Examples
 >>> ds.climate_trends.calculate_spatial_trends(variable="t2m", num_years=10)
 """
 
-__version__ = "0.3.0"
+__version__ = "1.1"
 
 # Import and register accessors
 def accessors():
