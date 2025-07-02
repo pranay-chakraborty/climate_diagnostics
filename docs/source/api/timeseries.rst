@@ -12,6 +12,9 @@ The TimeSeries module extends xarray Datasets with a ``.climate_timeseries`` acc
 - Time series plotting and visualization
 - Spatial standard deviation analysis
 - STL decomposition for trend and seasonal analysis
+- **Advanced chunking optimization for large datasets**
+- **Memory-efficient processing strategies**
+- **Performance tuning and diagnostics**
 
 Quick Example
 =============
@@ -58,6 +61,24 @@ Decomposition Methods
 .. automethod:: climate_diagnostics.TimeSeries.TimeSeries.TimeSeriesAccessor.decompose_time_series
    :no-index:
 
+Chunking and Optimization
+-------------------------
+
+.. automethod:: climate_diagnostics.TimeSeries.TimeSeries.TimeSeriesAccessor.optimize_chunks
+   :no-index:
+
+.. automethod:: climate_diagnostics.TimeSeries.TimeSeries.TimeSeriesAccessor.optimize_chunks_advanced
+   :no-index:
+
+.. automethod:: climate_diagnostics.TimeSeries.TimeSeries.TimeSeriesAccessor.print_chunking_info
+   :no-index:
+
+.. automethod:: climate_diagnostics.TimeSeries.TimeSeries.TimeSeriesAccessor.analyze_chunking_strategy
+   :no-index:
+
+.. automethod:: climate_diagnostics.TimeSeries.TimeSeries.TimeSeriesAccessor.optimize_for_decomposition
+   :no-index:
+
 Basic Examples
 ==============
 
@@ -69,7 +90,7 @@ Simple Time Series Plot
    # Plot global mean time series
    fig = ds.climate_timeseries.plot_time_series(
        variable="air",
-       title="Global Mean Temperature"
+       area_weighted=True
    )
 
 Regional Time Series
@@ -80,8 +101,7 @@ Regional Time Series
    # Plot Arctic time series
    fig = ds.climate_timeseries.plot_time_series(
        variable="air",
-       latitude=slice(60, 90),
-       title="Arctic Temperature"
+       latitude=slice(60, 90)
    )
 
 Time Series Decomposition
@@ -103,6 +123,74 @@ Spatial Statistics
    # Plot spatial standard deviation
    fig = ds.climate_timeseries.plot_std_space(
        variable="air"
+   )
+
+Performance Optimization
+========================
+
+Chunking for Large Datasets
+---------------------------
+
+.. code-block:: python
+
+   # Basic chunking optimization
+   ds_optimized = ds.climate_timeseries.optimize_chunks(
+       target_mb=100,
+       variable="air"
+   )
+   
+   # Advanced chunking with custom strategies
+   ds_advanced = ds.climate_timeseries.optimize_chunks_advanced(
+       operation_type='timeseries',
+       performance_priority='memory',
+       variable="air"
+   )
+
+Chunking Analysis and Diagnostics
+---------------------------------
+
+.. code-block:: python
+
+   # Print current chunking information
+   ds.climate_timeseries.print_chunking_info(detailed=True)
+   
+   # Analyze chunking strategies
+   ds.climate_timeseries.analyze_chunking_strategy(variable="air")
+   
+   # Optimize specifically for decomposition
+   ds_decomp = ds.climate_timeseries.optimize_for_decomposition(
+       variable="air"
+   )
+
+Memory-Efficient Workflows
+--------------------------
+
+.. code-block:: python
+
+   # Complete workflow with optimization
+   import xarray as xr
+   import climate_diagnostics
+   
+   # Load large dataset
+   ds = xr.open_dataset("large_climate_data.nc")
+   
+   # Optimize chunking for time series analysis
+   ds_opt = ds.climate_timeseries.optimize_chunks_advanced(
+       operation_type='timeseries',
+       performance_priority='balanced',
+       memory_limit_gb=8.0
+   )
+   
+   # Perform analysis on optimized dataset
+   fig = ds_opt.climate_timeseries.plot_time_series(
+       variable="temperature",
+       latitude=slice(60, 90)
+   )
+   
+   # Decompose with optimized chunking
+   decomp = ds_opt.climate_timeseries.decompose_time_series(
+       variable="temperature",
+       optimize_chunks=True
    )
 
 Working with Regional Data
@@ -129,5 +217,5 @@ Working with Regional Data
 See Also
 ========
 
-* :doc:`trends` - Trend analysis methods
-* :doc:`plots` - Plotting functions
+* :doc:`./trends` - Trend analysis methods
+* :doc:`./plots` - Plotting functions

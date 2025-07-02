@@ -12,6 +12,8 @@ The Trends module extends xarray Datasets with a ``.climate_trends`` accessor th
 - Time series trend calculation
 - Spatial trend analysis across geographic domains
 - STL decomposition with linear regression
+- **Performance optimization for large-scale trend analysis**
+- **Memory-efficient parallel processing**
 
 Quick Example
 =============
@@ -50,6 +52,12 @@ Spatial Trend Analysis
 ----------------------
 
 .. automethod:: climate_diagnostics.TimeSeries.Trends.TrendsAccessor.calculate_spatial_trends
+   :no-index:
+
+Optimization Methods
+--------------------
+
+.. automethod:: climate_diagnostics.TimeSeries.Trends.TrendsAccessor.optimize_for_trends
    :no-index:
 
 Basic Examples
@@ -138,8 +146,63 @@ Working with Trend Results
    ax.set_title("Temperature Trends (K/decade)")
    plt.show()
 
+Performance Optimization for Trends
+===================================
+
+Optimizing Large Datasets
+-------------------------
+
+.. code-block:: python
+
+   # Optimize dataset for trend analysis
+   ds_optimized = ds.climate_trends.optimize_for_trends(
+       variable="air",
+       use_case='trend_analysis'
+   )
+   
+   # Calculate trends on optimized dataset
+   trends = ds_optimized.climate_trends.calculate_spatial_trends(
+       variable="air",
+       num_years=30,
+       optimize_chunks=True
+   )
+
+Memory-Efficient Trend Workflows
+--------------------------------
+
+.. code-block:: python
+
+   # Complete workflow for large datasets
+   import xarray as xr
+   import climate_diagnostics
+   
+   # Load large climate dataset
+   ds = xr.open_dataset("large_climate_model.nc")
+   
+   # Optimize for trend calculations
+   ds_opt = ds.climate_trends.optimize_for_trends(
+       variable="temperature"
+   )
+   
+   # Calculate long-term trends efficiently
+   long_term_trends = ds_opt.climate_trends.calculate_spatial_trends(
+       variable="temperature",
+       num_years=50,  # 50-year trends
+       n_workers=8,   # Use 8 parallel workers
+       optimize_chunks=True,
+       chunk_target_mb=150
+   )
+   
+   # Calculate regional trend time series
+   regional_trend = ds_opt.climate_trends.calculate_trend(
+       variable="temperature",
+       latitude=slice(30, 60),
+       longitude=slice(-120, -80),
+       plot=True
+   )
+
 See Also
 ========
 
-* :doc:`timeseries` - Time series analysis methods
-* :doc:`plots` - Plotting functions
+* :doc:`./timeseries` - Time series analysis methods
+* :doc:`./plots` - Plotting functions

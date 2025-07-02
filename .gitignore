@@ -8,3 +8,38 @@ __pycache__/
 build/
 dist/
 *.egg-info/
+
+# Documentation build directories
+docs/_build/
+docs/build/
+
+# Test and coverage files
+.coverage
+.pytest_cache/
+.tox/
+htmlcov/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS specific files
+.DS_Store
+Thumbs.db
+
+# Virtual environments
+venv/
+env/
+.env
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# mypy cache
+.mypy_cache/
+
+# Package building
+*.tar.gz

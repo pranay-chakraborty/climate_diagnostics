@@ -4,17 +4,37 @@ Changelog
 
 All notable changes to the Climate Diagnostics Toolkit will be documented here.
 
-🚀 **Version 1.1.0** (2025-06-30)
+🚀 **Version 1.1.1** (2025-07-02)
 =================================
 
-**New Features**
+**Major Features**
+
+- 🚀 **Sophisticated Disk-Aware Chunking Strategy** - Advanced chunking utilities with memory optimization and disk-aware processing
+- ⚡ **Dynamic Chunk Calculator** - Automatically optimizes chunks based on operation type and system resources  
+- 🔧 **Performance Profiling** - Built-in chunking analysis and optimization recommendations
+- 🧠 **Memory-Conscious Processing** - Intelligent memory estimation and chunk size calculation
+- 📊 **Operation-Specific Optimization** - Tailored chunking for time series, spatial analysis, and trend calculations
+
+**Enhanced Features**
 
 - ✨ Complete documentation overhaul with beautiful Furo theme
 - 🗺️ Enhanced plotting capabilities with Cartopy integration
-- 📈 Advanced time series decomposition methods
-- 📊 Statistical significance testing for trends
-- ⚡ Dask integration for large dataset processing
+- 📈 Advanced time series decomposition methods with optimized chunking
+- 📊 Statistical significance testing for trends with spatial chunking
+- ⚡ Advanced Dask integration for large dataset processing
 - 🎨 Customizable plot styling options
+
+🔄 **Version 1.1.0** (2025-06-30)
+=================================
+
+**Legacy Features**
+
+- ✨ Basic documentation and plotting capabilities
+- 🗺️ Initial Cartopy integration
+- 📈 Basic time series decomposition methods
+- 📊 Initial statistical significance testing for trends
+- ⚡ Basic Dask integration for large dataset processing
+- 🎨 Basic plot styling options
 
 **Improvements**
 
@@ -119,6 +139,6 @@ No breaking changes! All v1.0 code should work without modification.
 🔗 **Links**
 =============
 
-- `GitHub Releases <https://github.com/yourusername/climate_diagnostics/releases>`_
-- `PyPI Package <https://pypi.org/project/climate-diagnostics/>`_
-- `Conda Package <https://anaconda.org/conda-forge/climate-diagnostics>`_
+- `GitHub Releases <https://github.com/pranay-chakraborty/climate_diagnostics/releases>`_
+- **GitHub Repository**: https://github.com/pranay-chakraborty/climate_diagnostics
+- **Documentation**: https://pranay-chakraborty.github.io/climate_diagnostics/

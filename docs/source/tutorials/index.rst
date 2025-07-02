@@ -49,7 +49,7 @@ Welcome to the Climate Diagnostics Toolkit tutorials! These step-by-step guides 
       
       +++
       
-      Coming soon - time series tutorials
+      Time series analysis tutorials
 
    .. grid-item-card:: 🔬 Advanced
       :text-align: center
@@ -58,7 +58,7 @@ Welcome to the Climate Diagnostics Toolkit tutorials! These step-by-step guides 
       
       +++
       
-      Coming soon - advanced tutorials
+      Advanced analysis techniques
 
 💡 **Prerequisites**
 =====================

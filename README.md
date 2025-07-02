@@ -4,13 +4,13 @@
 [![Documentation](https://img.shields.io/badge/docs-latest-blue.svg)](https://pranay-chakraborty.github.io/climate_diagnostics/)
 [![Python Version](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.1-brightgreen.svg)](https://github.com/pranay-chakraborty/climate_diagnostics/releases)
-[![Status](https://img.shields.io/badge/status-alpha-orange.svg)](https://github.com/pranay-chakraborty/climate_diagnostics)
+[![Version](https://img.shields.io/badge/version-1.1.1-brightgreen.svg)](https://github.com/pranay-chakraborty/climate_diagnostics/releases)
+[![Status](https://img.shields.io/badge/status-stable-green.svg)](https://github.com/pranay-chakraborty/climate_diagnostics)
 [![GitHub Actions](https://github.com/pranay-chakraborty/climate_diagnostics/actions/workflows/docs.yml/badge.svg?branch=master)](https://github.com/pranay-chakraborty/climate_diagnostics/actions/workflows/docs.yml)
 [![Issues](https://img.shields.io/github/issues/pranay-chakraborty/climate_diagnostics.svg)](https://github.com/pranay-chakraborty/climate_diagnostics/issues)
 [![GitHub Stars](https://img.shields.io/github/stars/pranay-chakraborty/climate_diagnostics.svg)](https://github.com/pranay-chakraborty/climate_diagnostics/stargazers)
 
-A comprehensive Python toolkit for analyzing, processing, and visualizing climate data from model output, reanalysis, and observations. Built on xarray, it provides specialized accessors for time series, trends, and spatial diagnostics, with robust support for parallel processing and publication-quality figures.
+A comprehensive Python toolkit for analyzing, processing, and visualizing climate data from model output, reanalysis, and observations. Built on xarray, it provides specialized accessors for time series, trends, and spatial diagnostics, with **sophisticated disk-aware chunking optimization** and robust support for parallel processing and publication-quality figures.
 
 > **🌍 Perfect for climate scientists, researchers, and data analysts working with atmospheric and oceanic datasets.**
 
@@ -29,17 +29,18 @@ A comprehensive Python toolkit for analyzing, processing, and visualizing climat
 ## ✨ Key Features
 
 - **🔌 Seamless xarray Integration**: Access all features via `.climate_plots`, `.climate_timeseries`, and `.climate_trends` on xarray Datasets.
-- **📈 Temporal Analysis**: Trend detection, STL decomposition, and variability analysis.
+- **🚀 Sophisticated Chunking**: Advanced disk-aware chunking strategies with automatic memory optimization and performance profiling.
+- **📈 Temporal Analysis**: Trend detection, STL decomposition, and variability analysis with optimized chunking.
 - **🗺️ Spatial Visualization**: Publication-quality maps with Cartopy, custom projections, and area-weighted statistics.
 - **📊 Statistical Diagnostics**: Advanced methods for climate science, including ETCCDI indices.
-- **🔬 Multi-model Analysis**: Compare and evaluate climate model outputs.
-- **⚡ Performance**: Dask-powered parallel processing for large datasets.
+- **🔬 Multi-model Analysis**: Compare and evaluate climate model outputs with intelligent chunking.
+- **⚡ Performance**: Dask-powered parallel processing with dynamic chunk optimization for large datasets.
 
 ## 📦 Installation
 
 ### With pip
 ```bash
-pip install climate-diagnostics
+pip install climate_diagnostics
 ```
 
 ### With conda (recommended for all dependencies)
@@ -55,22 +56,32 @@ pip install -e .
 import xarray as xr
 from climate_diagnostics import accessors
 
-# Open a dataset
+# Open a large dataset
 ds = xr.open_dataset("/path/to/air.mon.mean.nc")
+
+# Optimize chunking for your analysis
+ds = ds.climate_timeseries.optimize_chunks_advanced(
+    operation_type='timeseries',
+    performance_priority='balanced'
+)
 
 # Plot a mean map
 ds.climate_plots.plot_mean(variable="air", season="djf")
 
-# Analyze trends
+# Analyze trends with optimized chunking
 ds.climate_trends.calculate_spatial_trends(
     variable="air",
     num_years=10,
     latitude=slice(40, 60),
-    longitude=slice(60, 110)
+    longitude=slice(60, 110),
+    optimize_chunks=True
 )
+
+# Get chunking recommendations
+ds.climate_timeseries.analyze_chunking_strategy()
 ```
 
-> **💡 Tip**: Check out the [Quick Start Guide](https://pranay-chakraborty.github.io/climate_diagnostics/quickstart.html) for a complete walkthrough!
+> **💡 Tip**: Check out the [Quick Start Guide](https://pranay-chakraborty.github.io/climate_diagnostics/quickstart.html) for a complete walkthrough including advanced chunking strategies!
 
 ## 🔧 API Overview
 

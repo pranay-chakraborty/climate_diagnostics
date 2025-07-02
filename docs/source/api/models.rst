@@ -41,5 +41,5 @@ Basic Example
 See Also
 ========
 
-* :doc:`timeseries` - Time series analysis methods
-* :doc:`trends` - Trend analysis methods
+* :doc:`./timeseries` - Time series analysis methods
+* :doc:`./trends` - Trend analysis methods

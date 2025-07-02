@@ -11,6 +11,7 @@ Comprehensive documentation for using the Climate Diagnostics Toolkit effectivel
    :maxdepth: 2
 
    plotting
+   performance
 
 🎯 **What's Covered**
 ======================
@@ -31,6 +32,20 @@ Comprehensive documentation for using the Climate Diagnostics Toolkit effectivel
          :click-parent:
          
          Learn Plotting
+
+   .. grid-item-card:: ⚡ Performance Guide
+      :text-align: center
+
+      Optimize chunking for speed
+      
+      +++
+      
+      .. button-ref:: performance
+         :expand:
+         :color: success
+         :click-parent:
+         
+         Optimize Performance
 
    .. grid-item-card:: 📈 Time Series Guide
       :text-align: center
@@ -57,4 +72,4 @@ Comprehensive documentation for using the Climate Diagnostics Toolkit effectivel
       
       +++
       
-      Coming soon - advanced guides
+      Expert techniques and workflows

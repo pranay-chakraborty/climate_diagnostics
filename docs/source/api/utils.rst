@@ -13,6 +13,7 @@ The utilities include:
 - Data selection and processing
 - Spatial averaging functions
 - Dask client management
+- **Advanced chunking strategies and optimization**
 
 Available Functions
 ===================
@@ -33,6 +34,12 @@ Dask Utilities
 ==============
 
 .. automodule:: climate_diagnostics.utils.dask_utils
+   :members:
+
+Chunking Utilities
+==================
+
+.. automodule:: climate_diagnostics.utils.chunking_utils
    :members:
 
 Basic Examples
@@ -71,6 +78,43 @@ Data Selection
 .. code-block:: python
 
    from climate_diagnostics.utils import select_process_data
+   
+   # Select and process data with automatic coordinate handling
+   processed_data = select_process_data(
+       ds,
+       variable="air",
+       latitude=slice(30, 60),
+       longitude=slice(-10, 40),
+       season="jja"  # Summer season
+   )
+
+Advanced Chunking
+-----------------
+
+.. code-block:: python
+
+   from climate_diagnostics.utils import (
+       dynamic_chunk_calculator, 
+       suggest_chunking_strategy,
+       print_chunking_info
+   )
+   
+   # Analyze current chunking
+   print_chunking_info(ds, detailed=True)
+   
+   # Get chunking recommendations
+   strategy = suggest_chunking_strategy(
+       ds, 
+       operation_type='timeseries',
+       target_mb=100
+   )
+   
+   # Calculate optimal chunks dynamically
+   optimal_chunks = dynamic_chunk_calculator(
+       ds,
+       operation_type='spatial',
+       performance_priority='speed'
+   )
    
    # Select and process data with automatic coordinate handling
    processed_data = select_process_data(
@@ -151,6 +195,6 @@ Memory-Efficient Processing
 See Also
 ========
 
-* :doc:`timeseries` - Time series analysis methods
-* :doc:`trends` - Trend analysis methods
-* :doc:`plots` - Plotting functions
+* :doc:`./timeseries` - Time series analysis methods
+* :doc:`./trends` - Trend analysis methods
+* :doc:`./plots` - Plotting functions

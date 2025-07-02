@@ -20,7 +20,7 @@ Real-world examples demonstrating the Climate Diagnostics Toolkit in action.
       
       +++
       
-      Coming soon - basic plotting examples
+      Basic plotting examples with real climate data
 
    .. grid-item-card:: 📈 Analysis Examples  
       :text-align: center
@@ -29,7 +29,7 @@ Real-world examples demonstrating the Climate Diagnostics Toolkit in action.
       
       +++
       
-      Coming soon - trend analysis examples
+      Trend analysis examples and workflows
 
    .. grid-item-card:: ⏱️ Time Series Examples
       :text-align: center
@@ -38,7 +38,7 @@ Real-world examples demonstrating the Climate Diagnostics Toolkit in action.
       
       +++
       
-      Coming soon - time series examples
+      Time series analysis and decomposition examples
 
    .. grid-item-card:: 🔬 Advanced Examples
       :text-align: center
@@ -47,7 +47,7 @@ Real-world examples demonstrating the Climate Diagnostics Toolkit in action.
       
       +++
       
-      Coming soon - advanced examples
+      Advanced analysis techniques and workflows
 
 🎯 **What You'll Find**
 ========================

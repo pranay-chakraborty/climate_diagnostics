@@ -17,7 +17,7 @@ We welcome contributions to the Climate Diagnostics Toolkit! This guide will hel
       
       +++
       
-      Report bugs on our `GitHub Issues <https://github.com/yourusername/climate_diagnostics/issues>`_ page.
+      Report bugs on our `GitHub Issues <https://github.com/pranay-chakraborty/climate_diagnostics/issues>`_ page.
 
    .. grid-item-card:: 💡 Suggest Features
       :text-align: center
@@ -26,7 +26,7 @@ We welcome contributions to the Climate Diagnostics Toolkit! This guide will hel
       
       +++
       
-      Start a discussion on our `GitHub Discussions <https://github.com/yourusername/climate_diagnostics/discussions>`_ page.
+      Start a discussion on our `GitHub Discussions <https://github.com/pranay-chakraborty/climate_diagnostics/discussions>`_ page.
 
    .. grid-item-card:: 📝 Improve Documentation
       :text-align: center
@@ -54,7 +54,7 @@ We welcome contributions to the Climate Diagnostics Toolkit! This guide will hel
 .. code-block:: bash
 
    # Fork on GitHub, then clone your fork
-   git clone https://github.com/yourusername/climate_diagnostics.git
+   git clone https://github.com/pranay-chakraborty/climate_diagnostics.git
    cd climate_diagnostics
 
 **2. Set Up Development Environment**

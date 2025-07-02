@@ -4,69 +4,176 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "climate_diagnostics"
-version = "1.1"
-description = "Climate diagnostics tools for analyzing and visualizing climate data"
+version = "1.1.1"
+description = "Production-ready climate diagnostics tools with advanced chunking optimization for analyzing and visualizing climate data"
 readme = "README.md"
 authors = [
     {name = "Pranay Chakraborty", email = "pranay.chakraborty.personal@gmail.com"},
 ]
-license = {file = "LICENSE"}
-requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.9"
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Science/Research",
-    "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
     "Operating System :: OS Independent",
     "Topic :: Scientific/Engineering :: Atmospheric Science",
     "Topic :: Scientific/Engineering :: Visualization",
+    "Topic :: Scientific/Engineering",
+    "Intended Audience :: Developers",
+    "Natural Language :: English",
 ]
 dependencies = [
-    "xarray",
-    "dask",
-    "netCDF4",
-    "bottleneck",
-    "matplotlib",
-    "numpy",
-    "scipy",
-    "cartopy",
+    "xarray>=0.20.0",
+    "dask[complete]>=2021.11.0",
+    "netCDF4>=1.5.0",
+    "bottleneck>=1.3.0",
+    "matplotlib>=3.5.0",
+    "numpy>=1.20.0",
+    "scipy>=1.7.0",
+    "pandas>=1.3.0",
+    "statsmodels>=0.13.0",
+    "cartopy>=0.20.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/pranaychakra/climate_diagnostics"
+Documentation = "https://climate-diagnostics.readthedocs.io/"
+Repository = "https://github.com/pranaychakra/climate_diagnostics.git"
+"Bug Tracker" = "https://github.com/pranaychakra/climate_diagnostics/issues"
+Changelog = "https://github.com/pranaychakra/climate_diagnostics/blob/main/docs/source/changelog.rst"
 
 [project.optional-dependencies]
 dev = [
-    "pytest",
-    "pytest-mock",
-    "pytest-cov",
-    "flake8",
-    "mypy",
-    "black",
-    "isort",
-    "pre-commit",
-    "sphinx",
-    "sphinx-rtd-theme",
-    "nbsphinx",
-    "tox",
-    "build",
-    "twine",
-    "jupyter",
-    "ipykernel",
+    "pytest>=6.0",
+    "pytest-mock>=3.0",
+    "pytest-cov>=3.0",
+    "flake8>=4.0",
+    "mypy>=0.900",
+    "black>=22.0",
+    "isort>=5.0",
+    "pre-commit>=2.0",
+    "tox>=3.20",
+    "build>=0.8",
+    "twine>=4.0",
+    "check-manifest>=0.48",
+]
+test = [
+    "pytest>=6.0",
+    "pytest-mock>=3.0",
+    "pytest-cov>=3.0",
+]
+docs = [
+    "sphinx>=4.0",
+    "furo>=2022.6.21",
+    "sphinx-copybutton>=0.5.0",
+    "sphinx-design>=0.3.0",
+    "myst-parser>=0.18.0",
+    "jupyter>=1.0",
+    "ipykernel>=6.0",
+]
+all = [
+    "climate_diagnostics[dev,test,docs]"
 ]
 
 [tool.setuptools]
 package-dir = {"" = "src"}
-packages = {find = {where = ["src"]}}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["climate_diagnostics*"]
+
+[tool.setuptools.package-data]
+climate_diagnostics = ["py.typed"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = "test_*.py"
 python_classes = "Test*"
 python_functions = "test_*"
+addopts = [
+    "--strict-markers",
+    "--strict-config", 
+    "--disable-warnings",
+]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks tests as integration tests",
+]
 
 [tool.black]
 line-length = 88
-target-version = ["py311"]
+target-version = ["py39"]
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | build
+  | dist
+  | docs/_build
+)/
+'''
 
 [tool.isort]
 profile = "black"
 line_length = 88
+known_first_party = ["climate_diagnostics"]
+force_sort_within_sections = true
+
+[tool.mypy]
+python_version = "3.9"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+strict_equality = true
+
+[[tool.mypy.overrides]]
+module = [
+    "cartopy.*",
+    "matplotlib.*",
+    "scipy.*",
+    "statsmodels.*",
+    "dask.*",
+    "xarray.*",
+]
+ignore_missing_imports = true
+
+[tool.coverage.run]
+source = ["src/climate_diagnostics"]
+omit = [
+    "*/tests/*",
+    "*/test_*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if self.debug:",
+    "if settings.DEBUG",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if 0:",
+    "if __name__ == .__main__.:",
+    "class .*\\bProtocol\\):",
+    "@(abc\\.)?abstractmethod",
+]

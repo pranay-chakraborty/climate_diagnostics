@@ -35,37 +35,64 @@ def get_coord_name(xarray_like_obj, possible_names):
 
 def filter_by_season(data_subset, season='annual'):
     """
-    Filter the data for a specific season.
+    Filter climate data for a specific season using month-based selection.
+
+    This function implements robust seasonal filtering that handles various
+    time coordinate formats commonly found in climate datasets, including
+    standard datetime64, cftime objects, and numeric time coordinates.
 
     Supported seasons are 'annual', 'jjas', 'djf', 'mam', 'son', 'jja'.
 
     Parameters
     ----------
     data_subset : xr.DataArray or xr.Dataset
-        The data to filter.
+        The climate data to filter by season.
     season : str, optional
-        The season to filter by. Defaults to 'annual'.
+        The season to filter by. Defaults to 'annual' (no filtering).
+        Options:
+        - 'annual': All months (no filtering)
+        - 'jjas': June-July-August-September (monsoon season)
+        - 'djf': December-January-February (winter/dry season)
+        - 'mam': March-April-May (spring/pre-monsoon)
+        - 'son': September-October-November (autumn/post-monsoon)
+        - 'jja': June-July-August (summer)
 
     Returns
     -------
     xr.DataArray or xr.Dataset
-        The filtered data.
+        The filtered data containing only the specified season.
+        
+    Raises
+    ------
+    ValueError
+        If time coordinate cannot be found or processed for seasonal filtering.
+
+    Notes
+    -----
+    This function automatically detects time coordinate naming conventions
+    and handles different datetime formats including CF-compliant cftime objects.
     """
     season_input = season
-    season = season.lower()
+    season = season.lower()  # Normalize to lowercase for consistent processing
+    
+    # Return unfiltered data for annual analysis
     if season == 'annual':
         return data_subset
 
+    # Step 1: Locate the time coordinate using flexible name detection
     time_coord_name = get_coord_name(data_subset, ['time', 't'])
     if time_coord_name is None:
         raise ValueError("Cannot find time coordinate for seasonal filtering.")
 
+    # Step 2: Validate that time coordinate is a usable dimension
     if time_coord_name not in data_subset.dims:
         if time_coord_name in data_subset.coords:
             print(f"Warning: Time coordinate '{time_coord_name}' exists but is not a dimension. "
                   "Cannot filter by season. Returning unfiltered data.")
             return data_subset
         raise ValueError(f"Time dimension '{time_coord_name}' not found for seasonal filtering.")
+
+    # Step 3: Extract month information using multiple approaches for robustness
 
     time_coord_da = data_subset[time_coord_name]
     if 'month' in data_subset.coords:

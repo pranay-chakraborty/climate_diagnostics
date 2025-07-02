@@ -12,7 +12,9 @@ The Climate Diagnostics Toolkit requires:
 - Python 3.11 or later
 - NumPy, SciPy, pandas, xarray
 - Matplotlib and Cartopy for plotting
-- Optional: Dask for parallel processing
+- Dask for parallel processing and chunking
+- netCDF4 and bottleneck for data handling
+- statsmodels for statistical analysis
 
 Environment Setup
 =================
@@ -26,7 +28,7 @@ Using Conda (Recommended)
 
 .. code-block:: bash
 
-   git clone https://github.com/yourusername/climate_diagnostics.git
+   git clone https://github.com/pranay-chakraborty/climate_diagnostics.git
    cd climate_diagnostics
 
 2. **Create the conda environment:**
@@ -69,7 +71,7 @@ If you prefer pip, ensure you have the required system dependencies for Cartopy:
 
 .. code-block:: bash
 
-   pip install climate-diagnostics
+   pip install climate_diagnostics
 
 Development Installation
 ========================
@@ -80,7 +82,7 @@ For development work:
 
 .. code-block:: bash
 
-   git clone https://github.com/yourusername/climate_diagnostics.git
+   git clone https://github.com/pranay-chakraborty/climate_diagnostics.git
    cd climate_diagnostics
 
 2. **Create a development environment:**
@@ -165,7 +167,7 @@ Getting Help
 
 If you encounter issues:
 
-1. Check the `GitHub Issues <https://github.com/yourusername/climate_diagnostics/issues>`_
+1. Check the `GitHub Issues <https://github.com/pranay-chakraborty/climate_diagnostics/issues>`_
 2. Search `Stack Overflow <https://stackoverflow.com/questions/tagged/climate-diagnostics>`_
 3. Open a new issue with:
    - Your OS and Python version

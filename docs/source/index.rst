@@ -15,19 +15,22 @@ Climate Diagnostics Toolkit
    :target: https://opensource.org/licenses/MIT
    :alt: License
 
-.. image:: https://img.shields.io/badge/version-1.1-brightgreen.svg
+.. image:: https://img.shields.io/badge/version-1.1.1-brightgreen.svg
    :alt: Version
 
-.. image:: https://img.shields.io/badge/status-alpha-orange.svg
+.. image:: https://img.shields.io/badge/status-stable-green.svg
    :alt: Status
 
-A Python toolkit for analyzing and visualizing climate data from model output, reanalysis, and observations. Built on xarray, it provides specialized accessors for time series analysis, trend calculation, and spatial plotting.
+A Python toolkit for analyzing and visualizing climate data from model output, reanalysis, and observations. Built on xarray, it provides specialized accessors for time series analysis, trend calculation, and spatial plotting with sophisticated disk-aware chunking optimization.
 
 🌍 **Key Features**
 ====================
 
 ✨ **xarray Integration**
    Access features via ``.climate_plots``, ``.climate_timeseries``, and ``.climate_trends`` accessors on xarray Datasets.
+
+⚡ **Sophisticated Chunking**
+   Advanced disk-aware chunking strategies with automatic memory optimization and performance profiling.
 
 📊 **Time Series Analysis** 
    Extract and analyze time series with spatial averaging, seasonal filtering, and STL decomposition.
@@ -38,8 +41,8 @@ A Python toolkit for analyzing and visualizing climate data from model output, r
 🔬 **Climate Indices**
    Calculate ETCCDI precipitation indices like Rx1day, Rx5day, wet/dry spell durations.
 
-⚡ **Dask Support**
-   Process large datasets efficiently with built-in Dask integration.
+🚀 **Dask Support**
+   Process large datasets efficiently with built-in Dask integration and dynamic chunk optimization.
 
 🚀 **Quick Start**
 ===================
@@ -49,22 +52,32 @@ A Python toolkit for analyzing and visualizing climate data from model output, r
    import xarray as xr
    import climate_diagnostics
 
-   # Open a climate dataset
+   # Open a large climate dataset
    ds = xr.open_dataset("temperature_data.nc")
+
+   # Optimize chunking for time series analysis
+   ds = ds.climate_timeseries.optimize_chunks_advanced(
+       operation_type='timeseries',
+       performance_priority='balanced'
+   )
 
    # Create basic visualizations
    ds.climate_plots.plot_mean(variable="air")
 
-   # Analyze time series
+   # Analyze time series with optimized performance
    ts = ds.climate_timeseries.plot_time_series(
        variable="air", 
        latitude=slice(30, 60)
    )
 
-   # Calculate trends
-   trend = ds.climate_trends.calculate_trend(
-       variable="air"
+   # Calculate trends with spatial chunking optimization
+   trend = ds.climate_trends.calculate_spatial_trends(
+       variable="air",
+       optimize_chunks=True
    )
+
+   # Get chunking recommendations
+   ds.climate_timeseries.analyze_chunking_strategy()
 
 📚 **Documentation Contents**
 ==============================
@@ -120,7 +133,7 @@ A Python toolkit for analyzing and visualizing climate data from model output, r
 
 .. code-block:: bash
 
-   pip install climate-diagnostics
+   pip install climate_diagnostics
 
 **With conda (recommended):**
 
@@ -262,7 +275,7 @@ If you use this toolkit in your research, please cite:
      author = {Chakraborty, Pranay and Muhammed, Adil I. K.},
      year = {2025},
      version = {1.1},
-     url = {https://github.com/yourusername/climate_diagnostics}
+     url = {https://github.com/pranay-chakraborty/climate_diagnostics}
    }
 
 Indices and tables

@@ -38,10 +38,36 @@ Examples
 >>> ds.climate_trends.calculate_spatial_trends(variable="t2m", num_years=10)
 """
 
-__version__ = "1.1"
+__version__ = "1.1.1"
+
+# Conditional import of main modules to handle optional dependencies gracefully
+# This allows the package to function even if some optional components are unavailable
+try:
+    from . import utils
+    _utils_available = True
+except ImportError:
+    _utils_available = False
+
+try:
+    from . import models  
+    _models_available = True
+except ImportError:
+    _models_available = False
+
+try:
+    from . import TimeSeries
+    _timeseries_available = True
+except ImportError:
+    _timeseries_available = False
+    
+try:
+    from . import plots
+    _plots_available = True
+except ImportError:
+    _plots_available = False
 
 # Import and register accessors
-def accessors():
+def register_accessors():
     """
     Register all custom accessors for xarray objects.
     
@@ -70,8 +96,29 @@ def accessors():
     >>> register_accessors()
     """
     
-    from climate_diagnostics.TimeSeries.TimeSeries import TimeSeriesAccessor
-    from climate_diagnostics.plots.plot import PlotsAccessor
-    from climate_diagnostics.TimeSeries.Trends import TrendsAccessor
+    # Import and register all accessor classes with comprehensive error handling
+    try:
+        from climate_diagnostics.TimeSeries.TimeSeries import TimeSeriesAccessor
+        from climate_diagnostics.plots.plot import PlotsAccessor
+        from climate_diagnostics.TimeSeries.Trends import TrendsAccessor
+        print("✓ All xarray accessors registered successfully")
+    except ImportError as e:
+        print(f"Warning: Could not register some accessors due to missing dependencies: {e}")
+        print("Install all dependencies to use the full functionality.")
 
-accessors()
+# Automatically register accessors when the module is imported
+# This provides immediate access to .climate_* methods on xarray objects
+register_accessors()
+
+# Define what gets imported with "from climate_diagnostics import *"
+__all__ = ["__version__", "register_accessors"]
+
+# Conditionally add available modules to __all__ based on successful imports
+if _utils_available:
+    __all__.append("utils")
+if _models_available:
+    __all__.append("models") 
+if _timeseries_available:
+    __all__.append("TimeSeries")
+if _plots_available:
+    __all__.append("plots")

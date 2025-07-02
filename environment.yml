@@ -16,6 +16,7 @@ dependencies:
   - statsmodels
   - scikit-learn
   - climlab
+  - cartopy
 
   # Development dependencies
   - pytest
@@ -36,4 +37,3 @@ dependencies:
       - build
       - twine
       - isort
-      - cartopy # not a development dependency

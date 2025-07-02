@@ -56,26 +56,49 @@ class PlotsAccessor:
     # --------------------------------------------------------------------------
     def _select_data(self, variable, latitude=None, longitude=None, level=None, time_range=None):
         """
-        Select a data variable and subset it based on spatial, temporal, and level coordinates.
+        Select and subset data variable based on spatial, temporal, and vertical coordinates.
 
-        This function handles various ways of specifying selections, including single values,
-        slices, and lists for each coordinate. It also automatically handles selection on
-        the level dimension if multiple levels exist and none are specified.
+        This is a core utility method that handles the complex logic of coordinate
+        selection across different climate datasets. It accommodates various coordinate
+        naming conventions and data structures commonly found in climate model output.
+        
+        Key features:
+        - Automatic coordinate name detection (lat/latitude, lon/longitude, etc.)
+        - Flexible selection methods (single values, slices, lists)
+        - Intelligent level handling with nearest-neighbor selection
+        - Comprehensive error handling and validation
+        - Support for both datetime and numeric time coordinates
 
         Parameters
         ----------
         variable : str
             The name of the data variable to select from the Dataset.
+            Must exist in dataset.data_vars.
         latitude : float, slice, or list, optional
-            Latitude range to select.
+            Latitude selection. Can be:
+            - Single value: nearest-neighbor selection
+            - Slice: range selection (e.g., slice(30, 60))
+            - List: specific values selection
         longitude : float, slice, or list, optional
-            Longitude range to select.
+            Longitude selection. Same formats as latitude.
         level : float or slice, optional
-            Level to select. A single value will be matched to the nearest level,
-            while a slice will select a range of levels. If not provided and
-            multiple levels exist, the first level is selected by default.
+            Vertical level selection. If not specified and multiple levels exist,
+            defaults to first level. Single values use nearest-neighbor matching.
         time_range : slice, optional
-            Time range to select, specified as a slice of datetime-like objects or strings.
+            Time range selection as slice of datetime-like objects or strings.
+            E.g., slice('2000-01-01', '2010-12-31')
+
+        Returns
+        -------
+        selected_data : xr.DataArray
+            The selected and subsetted data variable with applied selections.
+        level_dim_name_found : str or None
+            Name of the level dimension found in the data (for reference).
+        level_op : str or None
+            Description of level operation performed:
+            - 'single_selected': Single level chosen by user
+            - 'range_selected': Level range selected
+            - 'single_selected_default': First level chosen automatically
 
         Returns
         -------
@@ -91,16 +114,27 @@ class PlotsAccessor:
         ------
         ValueError
             If the variable is not found or if coordinate selections are invalid.
+            
+        Notes
+        -----
+        This method implements robust coordinate validation that handles:
+        - Different coordinate naming conventions (CF-compliant and others)
+        - Datetime vs numeric coordinate systems
+        - Boundary checking with informative error messages
+        - Graceful handling of missing coordinates
         """
-        # --- Step 1: Validate variable and initialize containers ---
+        # --- Step 1: Variable validation and initialization ---
+        # Ensure the requested variable exists in the dataset
         if variable not in self._obj.data_vars:
             raise ValueError(f"Variable '{variable}' not found. Available: {list(self._obj.data_vars.keys())}")
 
         data_var = self._obj[variable]
-        selection_dict = {}
-        method_dict = {}
+        selection_dict = {}  # Store coordinate selections for xarray.sel()
+        method_dict = {}     # Store method specifications (e.g., 'nearest' for exact matching)
 
-        # --- Step 2: Dynamically map standard coordinate names to actual names in the dataset ---
+        # --- Step 2: Coordinate name mapping and discovery ---
+        # Build flexible mapping from standard names to actual coordinate names in the dataset
+        # This handles different naming conventions across climate datasets (CF-compliant and others)
         coord_map = {
             'latitude': get_coord_name(data_var, ['lat', 'latitude', 'LAT', 'LATITUDE', 'y', 'rlat', 'nav_lat']),
             'longitude': get_coord_name(data_var, ['lon', 'longitude', 'LON', 'LONGITUDE', 'x', 'rlon', 'nav_lon']),
@@ -108,14 +142,15 @@ class PlotsAccessor:
             'level': next((name for name in ['level', 'lev', 'plev', 'height', 'altitude', 'depth', 'z'] if name in data_var.dims or name in data_var.coords), None)
         }
         level_dim_name_found = coord_map['level']
-        level_op = None
+        level_op = None  # Track level operations for metadata
 
+        # Map user parameters to coordinate names and datetime handling flags
         coord_params_map = {
             'latitude': (latitude, False), 'longitude': (longitude, False),
             'time': (time_range, True), 'level': (level, False)
         }
 
-        # --- Step 3: Process and validate each coordinate selection parameter ---
+        # --- Step 3: Process each coordinate selection with comprehensive validation ---
         for coord_type_name, (coord_val_param, is_param_datetime_intent) in coord_params_map.items():
             actual_coord_name_in_data = coord_map[coord_type_name]
             if coord_val_param is None:

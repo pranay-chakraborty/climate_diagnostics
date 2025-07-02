@@ -3,15 +3,15 @@ import climlab
 from climlab.radiation.radiation import default_absorbers
 from climlab import constants as const
 import matplotlib.pyplot as plt
-from scipy.signal import savgol_filter # For advanced signal smoothing
+from scipy.signal import savgol_filter  # For advanced signal smoothing to reduce numerical noise
 
 
 def create_rce_model(num_lev=60,
-                              water_depth=5.,
-                              integrate_years=5,
-                              gas_vmr=None,
-                              savgol_window=15,
-                              savgol_order=3):
+                     water_depth=5.,
+                     integrate_years=5,
+                     gas_vmr=None,
+                     savgol_window=15,
+                     savgol_order=3):
    """ Simulates single-column Radiative-Convective Equilibrium (RCE).
 
    This function sets up and runs a single-column atmospheric model until it

@@ -162,5 +162,5 @@ Working with Different Variables
 See Also
 ========
 
-* :doc:`timeseries` - Time series analysis methods
-* :doc:`trends` - Trend analysis methods
+* :doc:`./timeseries` - Time series analysis methods
+* :doc:`./trends` - Trend analysis methods

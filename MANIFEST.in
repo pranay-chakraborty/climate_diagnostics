@@ -1,0 +1,30 @@
+# Include documentation and metadata files
+include README.md
+include LICENSE
+include pyproject.toml
+include environment.yml
+
+# Include all source code
+recursive-include src *.py
+
+# Include test files for development installations
+recursive-include tests *.py
+
+# Include documentation source (but not built docs)
+recursive-include docs/source *.rst
+recursive-include docs/source *.py
+recursive-include docs/source/_static *
+include docs/requirements.txt
+include docs/Makefile
+include docs/make.bat
+
+# Exclude build artifacts and temp files
+global-exclude *.pyc
+global-exclude __pycache__
+global-exclude *.so
+global-exclude .DS_Store
+global-exclude *.egg-info
+prune docs/_build
+prune docs/build
+prune .git
+prune .github

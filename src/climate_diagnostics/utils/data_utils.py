@@ -1,12 +1,40 @@
 import xarray as xr
 import numpy as np
+from typing import Optional, Union, Tuple, Any, List
+import warnings
 
 from .coord_utils import get_coord_name, filter_by_season
 
 
-def validate_and_get_sel_slice(coord_val_param, data_coord, coord_name_str, is_datetime_intent=False):
+def validate_and_get_sel_slice(
+    coord_val_param: Union[float, int, slice, List, np.ndarray], 
+    data_coord: xr.DataArray, 
+    coord_name_str: str, 
+    is_datetime_intent: bool = False
+) -> Tuple[Union[float, int, slice, List, np.ndarray], bool]:
     """
     Validate a coordinate selection parameter against the data's coordinate range.
+    
+    Parameters
+    ----------
+    coord_val_param : Union[float, int, slice, List, np.ndarray]
+        The coordinate selection parameter to validate
+    data_coord : xr.DataArray
+        The data coordinate array to validate against
+    coord_name_str : str
+        Name of the coordinate for error messages
+    is_datetime_intent : bool, optional
+        Whether the coordinate is intended to be datetime, by default False
+        
+    Returns
+    -------
+    Tuple[Union[float, int, slice, List, np.ndarray], bool]
+        Validated selection value and whether nearest neighbor selection is needed
+        
+    Raises
+    ------
+    ValueError
+        If coordinate validation fails
     """
     min_data_val_raw = data_coord.min().item()
     max_data_val_raw = data_coord.max().item()
@@ -16,52 +44,151 @@ def validate_and_get_sel_slice(coord_val_param, data_coord, coord_name_str, is_d
     comp_req_min, comp_req_max = None, None
     comp_data_min, comp_data_max = min_data_val_raw, max_data_val_raw
 
+    # Determine coordinate bounds based on selection type
     if isinstance(coord_val_param, slice):
+        # Slice selection: validate start and stop bounds
         comp_req_min, comp_req_max = coord_val_param.start, coord_val_param.stop
     elif isinstance(coord_val_param, (list, np.ndarray)):
-        if not len(coord_val_param): raise ValueError(f"{coord_name_str.capitalize()} selection list/array empty.")
+        # List/array selection: validate against min/max values in the selection
+        if not len(coord_val_param): 
+            raise ValueError(f"{coord_name_str.capitalize()} selection list/array empty.")
         comp_req_min, comp_req_max = min(coord_val_param), max(coord_val_param)
     else: 
+        # Scalar selection: single value selection (will use nearest-neighbor if numeric)
         comp_req_min = comp_req_max = coord_val_param
         needs_nearest_for_this_coord = isinstance(coord_val_param, (int, float, np.number))
 
+    # Special handling for datetime coordinates (time-related selections)
     if is_datetime_intent:
-        data_dtype = data_coord.dtype
-        try:
-            if comp_req_min is not None: comp_req_min = np.datetime64(comp_req_min)
-            if comp_req_max is not None: comp_req_max = np.datetime64(comp_req_max)
-            
-            if np.issubdtype(data_dtype, np.datetime64):
-                if isinstance(min_data_val_raw, (int, np.integer)):
-                    unit = np.datetime_data(data_dtype)[0]
-                    comp_data_min = np.datetime64(min_data_val_raw, unit)
-                    comp_data_max = np.datetime64(max_data_val_raw, unit)
-                else: 
-                    comp_data_min = np.datetime64(min_data_val_raw)
-                    comp_data_max = np.datetime64(max_data_val_raw)
-            elif hasattr(min_data_val_raw, 'year'):
-                comp_data_min = np.datetime64(min_data_val_raw)
-                comp_data_max = np.datetime64(max_data_val_raw)
+        comp_data_min, comp_data_max = _validate_datetime_coordinates(
+            coord_val_param, data_coord, coord_name_str, 
+            comp_req_min, comp_req_max, min_data_val_raw, max_data_val_raw
+        )
 
-        except Exception as e:
-            print(f"Warning: Could not fully process/validate {coord_name_str} range "
-                  f"'{coord_val_param}' against data bounds due to type issues: {e}. "
-                  "Relying on xarray's .sel() behavior.")
-            comp_data_min, comp_data_max = None, None
-
-    if comp_data_min is not None and comp_data_max is not None: 
-        if comp_req_min is not None and comp_req_min > comp_data_max:
-            raise ValueError(f"Requested {coord_name_str} min {coord_val_param} > data max {max_data_val_raw}")
-        if comp_req_max is not None and comp_req_max < comp_data_min:
-            raise ValueError(f"Requested {coord_name_str} max {coord_val_param} < data min {min_data_val_raw}")
+    # Perform comprehensive bounds checking to catch invalid selections early
+    _check_coordinate_bounds(
+        comp_req_min, comp_req_max, comp_data_min, comp_data_max, 
+        coord_name_str, coord_val_param, min_data_val_raw, max_data_val_raw
+    )
     
     return sel_val, needs_nearest_for_this_coord
 
 
-def select_process_data(xarray_obj, variable, latitude=None, longitude=None, level=None,
-                        time_range=None, season='annual', year=None):
+def _validate_datetime_coordinates(
+    coord_val_param: Any, 
+    data_coord: xr.DataArray, 
+    coord_name_str: str,
+    comp_req_min: Any, 
+    comp_req_max: Any, 
+    min_data_val_raw: Any, 
+    max_data_val_raw: Any
+) -> Tuple[Any, Any]:
+    """
+    Helper function to validate and convert datetime coordinates for comparison.
+    
+    Handles the complex logic of comparing user-provided datetime values with
+    dataset coordinate values, accounting for different datetime formats and types.
+    """
+    comp_data_min, comp_data_max = min_data_val_raw, max_data_val_raw
+    data_dtype = data_coord.dtype
+    
+    # Convert user-provided values to numpy datetime64 for comparison
+    try:
+        if comp_req_min is not None: 
+            comp_req_min = np.datetime64(comp_req_min)
+        if comp_req_max is not None: 
+            comp_req_max = np.datetime64(comp_req_max)
+        
+        # Handle numpy datetime64 coordinate data
+        if np.issubdtype(data_dtype, np.datetime64):
+            # Convert integer timestamps to proper datetime64 objects using correct units
+            if isinstance(min_data_val_raw, (int, np.integer)):
+                unit = np.datetime_data(data_dtype)[0]  # Extract time unit from dtype
+                comp_data_min = np.datetime64(min_data_val_raw, unit)
+                comp_data_max = np.datetime64(max_data_val_raw, unit)
+            else: 
+                # Direct conversion for datetime objects
+                comp_data_min = np.datetime64(min_data_val_raw)
+                comp_data_max = np.datetime64(max_data_val_raw)
+        elif hasattr(min_data_val_raw, 'year'):
+            comp_data_min = np.datetime64(min_data_val_raw)
+            comp_data_max = np.datetime64(max_data_val_raw)
+
+    except Exception as e:
+        warnings.warn(
+            f"Could not fully process/validate {coord_name_str} range "
+            f"'{coord_val_param}' against data bounds due to type issues: {e}. "
+            "Relying on xarray's .sel() behavior.",
+            UserWarning
+        )
+        comp_data_min, comp_data_max = None, None
+    
+    return comp_data_min, comp_data_max
+
+
+def _check_coordinate_bounds(
+    comp_req_min: Any, 
+    comp_req_max: Any, 
+    comp_data_min: Any, 
+    comp_data_max: Any,
+    coord_name_str: str, 
+    coord_val_param: Any, 
+    min_data_val_raw: Any, 
+    max_data_val_raw: Any
+) -> None:
+    """Helper function to check coordinate bounds."""
+    if comp_data_min is not None and comp_data_max is not None: 
+        if comp_req_min is not None and comp_req_min > comp_data_max:
+            raise ValueError(
+                f"Requested {coord_name_str} min {coord_val_param} > data max {max_data_val_raw}"
+            )
+        if comp_req_max is not None and comp_req_max < comp_data_min:
+            raise ValueError(
+                f"Requested {coord_name_str} max {coord_val_param} < data min {min_data_val_raw}"
+            )
+
+
+def select_process_data(
+    xarray_obj: xr.Dataset, 
+    variable: str, 
+    latitude: Optional[Union[float, slice, List]] = None, 
+    longitude: Optional[Union[float, slice, List]] = None, 
+    level: Optional[Union[float, slice, List]] = None,
+    time_range: Optional[slice] = None, 
+    season: str = 'annual', 
+    year: Optional[int] = None
+) -> xr.DataArray:
     """
     Select, filter, and process a data variable from the dataset.
+    
+    Parameters
+    ----------
+    xarray_obj : xr.Dataset
+        The input dataset
+    variable : str
+        Name of the variable to select
+    latitude : Optional[Union[float, slice, List]], optional
+        Latitude selection parameter, by default None
+    longitude : Optional[Union[float, slice, List]], optional
+        Longitude selection parameter, by default None
+    level : Optional[Union[float, slice, List]], optional
+        Level selection parameter, by default None
+    time_range : Optional[slice], optional
+        Time range selection, by default None
+    season : str, optional
+        Season filter, by default 'annual'
+    year : Optional[int], optional
+        Year filter, by default None
+        
+    Returns
+    -------
+    xr.DataArray
+        Processed data variable
+        
+    Raises
+    ------
+    ValueError
+        If variable not found or selection results in empty data
     """
     if variable not in xarray_obj.data_vars:
         raise ValueError(f"Variable '{variable}' not found. Available: {list(xarray_obj.data_vars.keys())}")

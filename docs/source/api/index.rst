@@ -17,8 +17,8 @@ Climate Diagnostics API documentation provides detailed information about all mo
 Quick Navigation
 ================
 
-* :doc:`plots` - Data visualization and plotting functions
-* :doc:`timeseries` - Time series analysis methods
-* :doc:`trends` - Trend detection and analysis
-* :doc:`utils` - Utility functions for data processing
-* :doc:`models` - Climate model utilities
+* :doc:`./plots` - Data visualization and plotting functions
+* :doc:`./timeseries` - Time series analysis methods
+* :doc:`./trends` - Trend detection and analysis
+* :doc:`./utils` - Utility functions for data processing
+* :doc:`./models` - Climate model utilities

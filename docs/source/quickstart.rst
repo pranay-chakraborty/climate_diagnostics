@@ -25,6 +25,30 @@ The toolkit extends xarray with three main accessors:
 - ``.climate_timeseries`` - Time series analysis  
 - ``.climate_trends`` - Trend analysis
 
+Performance Optimization
+========================
+
+For large datasets, optimize chunking for better performance:
+
+.. code-block:: python
+
+   # Check current chunking status
+   ds.climate_timeseries.print_chunking_info()
+   
+   # Get chunking recommendations
+   recommendations = ds.climate_timeseries.analyze_chunking_strategy()
+   
+   # Optimize chunks for time series operations
+   ds_optimized = ds.climate_timeseries.optimize_chunks_advanced(
+       operation_type='timeseries',
+       performance_priority='memory'  # 'speed', 'memory', or 'balanced'
+   )
+   
+   # For spatial operations
+   ds_spatial = ds.climate_trends.optimize_for_trends(
+       performance_priority='speed'
+   )
+
 First Visualization
 ===================
 
@@ -275,6 +299,5 @@ Need Help?
 ==========
 
 - 📖 **Documentation**: You're reading it!
-- 🐛 **Issues**: `GitHub Issues <https://github.com/yourusername/climate_diagnostics/issues>`_
-- 💬 **Discussions**: `GitHub Discussions <https://github.com/yourusername/climate_diagnostics/discussions>`_
-- � **Issues**: https://github.com/pranay-chakraborty/climate_diagnostics/issues
+- 🐛 **Issues**: `GitHub Issues <https://github.com/pranay-chakraborty/climate_diagnostics/issues>`_
+- 💬 **Discussions**: `GitHub Discussions <https://github.com/pranay-chakraborty/climate_diagnostics/discussions>`_
