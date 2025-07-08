@@ -1,0 +1,34 @@
+# requirements.txt for climate-diagnostics (pip equivalent)
+
+# Core dependencies
+xarray
+dask
+netCDF4
+bottleneck
+matplotlib
+numpy
+scipy
+statsmodels
+scikit-learn
+climlab
+cartopy
+
+# Development dependencies
+pytest
+pytest-mock
+flake8
+jupyter
+ipykernel
+mypy
+pre-commit
+
+# pip-only dependencies
+pytest-cov
+black
+sphinx
+sphinx-rtd-theme
+nbsphinx
+tox
+build
+twine
+isort

@@ -13,10 +13,11 @@ import cartopy.feature as cfeature
 from dask.distributed import Client, LocalCluster
 import logging
 from ..utils import get_coord_name, select_process_data, get_spatial_mean, get_or_create_dask_client
+from ..utils.plot_utils import get_projection
 
 # Try to import chunking utilities
 try:
-    from ..utils.chunking_utils import get_optimal_chunks, rechunk_dataset, suggest_chunking_strategy
+    from ..utils.chunking_utils import rechunk_dataset, suggest_chunking_strategy, dynamic_chunk_calculator
     CHUNKING_AVAILABLE = True
 except ImportError:
     CHUNKING_AVAILABLE = False
@@ -46,69 +47,50 @@ class TrendsAccessor:
     # CHUNKING AND OPTIMIZATION METHODS
     # --------------------------------------------------------------------------
     def optimize_for_trends(self, variable: Optional[str] = None, 
-                           use_case: str = 'trend_analysis') -> Optional[xr.Dataset]:
+                           operation_type: str = 'timeseries', 
+                           performance_priority: str = 'balanced') -> Optional[xr.Dataset]:
         """
         Optimize dataset chunking specifically for trend analysis workflows.
         
-        Trend analysis has different computational patterns than regular time series:
-        - Requires larger time chunks for STL decomposition stability
-        - Benefits from smaller spatial chunks for parallel trend calculations
-        - Needs balanced memory usage for statistical operations
-        
-        This method applies pre-configured chunking strategies optimized for
-        various trend analysis scenarios.
+        This method applies dynamic, pre-configured chunking strategies optimized for
+        various trend analysis scenarios using the new dynamic chunk calculator.
         
         Parameters
         ----------
         variable : str, optional
             Variable to optimize for. If None, optimizes for all variables.
-            Focusing on a specific variable provides better optimization.
-        use_case : str, optional
+        operation_type : str, optional
             Specific trend analysis use case. Options:
-            - 'trend_analysis': General trend calculation (default)
-            - 'spatial_trends': Grid-point trend analysis
-            - 'memory_limited': Conservative chunking for low-memory systems
+            - 'timeseries': General trend calculation (default)
+            - 'spatial': Grid-point trend analysis
+            - 'statistical': For statistical operations
+            - 'io': For I/O heavy operations
+        performance_priority : str, optional
+            Optimization priority. Options: 'memory', 'speed', 'balanced'.
         
         Returns
         -------
         xr.Dataset or None
-            Optimized dataset with trend-analysis-friendly chunking,
-            or None if optimization fails or chunking utilities unavailable.
-        
-        Examples
-        --------
-        >>> # Optimize for general trend analysis
-        >>> ds_opt = ds.climate_trends.optimize_for_trends()
-        >>> 
-        >>> # Optimize for spatial trend calculations
-        >>> ds_spatial = ds.climate_trends.optimize_for_trends(
-        ...     variable='temperature', use_case='spatial_trends'
-        ... )
-        
-        Notes
-        -----
-        This optimization is particularly beneficial before calling:
-        - calculate_trend()
-        - plot_spatial_trends()
-        - Any STL decomposition operations
+            Optimized dataset with trend-analysis-friendly chunking.
         """
         if not CHUNKING_AVAILABLE:
-            print("Warning: Chunking optimization not available.")
-            return None
+            warnings.warn("Chunking optimization not available because chunking_utils could not be imported.")
+            return self._obj
         
         try:
-            # Get pre-configured strategy for the specified use case
-            strategy = suggest_chunking_strategy(self._obj, target_use_case=use_case)
-            print(f"Applying chunking strategy: {strategy['strategy']['description']}")
-            print(f"Recommended chunks: {strategy['chunks']}")
-            
-            # Apply the chunking strategy
-            optimized_ds = self._obj.chunk(strategy['chunks'])
-            return optimized_ds
+            print(f"Optimizing chunks for operation '{operation_type}' with '{performance_priority}' priority...")
+            # Use the new dynamic chunk calculator for more sophisticated optimization
+            optimal_chunks = dynamic_chunk_calculator(
+                self._obj, 
+                operation_type=operation_type, 
+                performance_priority=performance_priority
+            )
+            print(f"Applying optimal chunks: {optimal_chunks}")
+            return self._obj.chunk(optimal_chunks)
             
         except Exception as e:
-            print(f"Warning: Could not optimize for trends: {e}")
-            return None
+            warnings.warn(f"Could not optimize for trends due to an error: {e}")
+            return self._obj
 
     # --------------------------------------------------------------------------
     # INTERNAL HELPER METHODS
@@ -133,7 +115,8 @@ class TrendsAccessor:
                         period=12,
                         plot=True,
                         return_results=False,
-                        save_plot_path=None
+                        save_plot_path=None,
+                        title=None
                         ):
         """
         Calculate and visualize the trend of a time series for a specified variable and region.
@@ -178,6 +161,9 @@ class TrendsAccessor:
             Defaults to False.
         save_plot_path : str or None, optional
             If provided, the path where the plot will be saved.
+        title : str, optional
+            The title for the plot. If not provided, a descriptive title will be
+            generated automatically.
 
         Returns
         -------
@@ -325,19 +311,22 @@ class TrendsAccessor:
                     label=slope_label)
 
             # Create a descriptive title
-            title_parts = [f"Trend: {variable.capitalize()}"]
             ylabel = f'{variable.capitalize()} Trend' + (f' ({units_label})' if units_label else '')
-            
-            region_str = "Global"
-            if latitude is not None or longitude is not None:
-                region_str = "Regional" if isinstance(latitude, (slice, list)) or isinstance(longitude, (slice, list)) else "Point"
-            title_parts.append(f"({region_str} Analysis)")
-            
-            if season.lower() != 'annual':
-                title_parts.append(f"Season={season.upper()}")
-            
-            full_title = " ".join(title_parts)
-            full_title += "\n(STL Trend + Linear Regression)"
+            if title is None:
+                title_parts = [f"Trend: {variable.capitalize()}"]
+                
+                region_str = "Global"
+                if latitude is not None or longitude is not None:
+                    region_str = "Regional" if isinstance(latitude, (slice, list)) or isinstance(longitude, (slice, list)) else "Point"
+                title_parts.append(f"({region_str} Analysis)")
+                
+                if season.lower() != 'annual':
+                    title_parts.append(f"Season={season.upper()}")
+                
+                full_title = " ".join(title_parts)
+                full_title += "\n(STL Trend + Linear Regression)"
+            else:
+                full_title = title
 
             plt.title(full_title, fontsize=14)
             plt.xlabel('Time', fontsize=14)
@@ -394,7 +383,9 @@ class TrendsAccessor:
                            save_plot_path=None,
                            cmap='coolwarm',
                            optimize_chunks=True,
-                           chunk_target_mb=100):
+                           performance_priority: str = 'balanced',
+                           title=None,
+                           projection='PlateCarree'):
         """
         Calculate and visualize spatial trends across a geographic domain.
 
@@ -442,8 +433,13 @@ class TrendsAccessor:
             The colormap to use for the trend map plot. Defaults to 'coolwarm'.
         optimize_chunks : bool, optional
             Whether to optimize chunking for spatial trends calculation. Defaults to True.
-        chunk_target_mb : float, optional
-            Target chunk size in MB for spatial operations. Defaults to 100 MB.
+        performance_priority : str, optional
+            Optimization priority for chunking. Options: 'memory', 'speed', 'balanced'.
+        title : str, optional
+            The title for the plot. If not provided, a descriptive title will be
+            generated automatically.
+        projection : str, optional
+            The name of the cartopy projection to use. Defaults to 'PlateCarree'.
 
         Returns
         -------
@@ -471,11 +467,13 @@ class TrendsAccessor:
         # Optimize chunking for spatial trends if requested
         if optimize_chunks and CHUNKING_AVAILABLE:
             try:
-                dataset = rechunk_dataset(self._obj, target_mb=chunk_target_mb, 
-                                        variable=variable, time_freq='monthly')
-                print(f"Dataset optimized for spatial trends (target: {chunk_target_mb} MB per chunk)")
+                # Use the more advanced dynamic chunk calculator
+                dataset = self.optimize_for_trends(variable=variable, 
+                                                   operation_type='spatial', 
+                                                   performance_priority=performance_priority)
+                print(f"Dataset optimized for spatial trends.")
             except Exception as e:
-                print(f"Warning: Could not optimize chunks: {e}. Using original dataset.")
+                warnings.warn(f"Could not optimize chunks: {e}. Using original dataset.")
                 dataset = self._obj
         else:
             dataset = self._obj
@@ -619,7 +617,8 @@ class TrendsAccessor:
                 cbar_label_str = f"Trend ({data_units} / {period_str_label})" if data_units else f"Trend ({period_str_label})"
 
                 fig = plt.figure(figsize=(14, 8))
-                ax = fig.add_subplot(1, 1, 1, projection=ccrs.PlateCarree())
+                proj = get_projection(projection)
+                ax = fig.add_subplot(1, 1, 1, projection=proj)
 
                 # Create the plot using contourf for filled contours
                 contour_plot = trend_computed_map.plot.contourf(
@@ -649,10 +648,13 @@ class TrendsAccessor:
                 gl.xlabel_style = {'size': 10}; gl.ylabel_style = {'size': 10}
                 
                 # Set a descriptive title
-                season_title_str = season.upper() if season.lower() != 'annual' else 'Annual'
-                plot_title = (f"{season_title_str} {var_long_name.capitalize()} Trend ({period_str_label})\n"
-                              f"{time_period_title_str}")
-                if level_selection_info_title: plot_title += f" at {level_selection_info_title}"
+                if title is None:
+                    season_title_str = season.upper() if season.lower() != 'annual' else 'Annual'
+                    plot_title = (f"{season_title_str} {var_long_name.capitalize()} Trend ({period_str_label})\n"
+                                  f"{time_period_title_str}")
+                    if level_selection_info_title: plot_title += f" at {level_selection_info_title}"
+                else:
+                    plot_title = title
                 ax.set_title(plot_title, fontsize=14)
 
                 plt.tight_layout(pad=1.5)

@@ -82,48 +82,48 @@ Chunking and Optimization
 Basic Examples
 ==============
 
-Simple Time Series Plot
------------------------
+Comprehensive Analysis Workflow
+----------------------------------
+
+This example demonstrates a complete workflow, from optimizing data chunks to decomposition and visualization.
 
 .. code-block:: python
 
-   # Plot global mean time series
-   fig = ds.climate_timeseries.plot_time_series(
+   import xarray as xr
+   import matplotlib.pyplot as plt
+   import climate_diagnostics
+
+   # Load a sample dataset
+   ds = xr.tutorial.load_dataset("air_temperature")
+
+   # 1. Optimize chunking for decomposition analysis
+   optimized_ds = ds.climate_timeseries.optimize_for_decomposition(
        variable="air",
-       area_weighted=True
+       performance_priority='memory'
    )
 
-Regional Time Series
---------------------
-
-.. code-block:: python
-
-   # Plot Arctic time series
-   fig = ds.climate_timeseries.plot_time_series(
+   # 2. Decompose the time series for a specific region
+   decomposition = optimized_ds.climate_timeseries.decompose_time_series(
        variable="air",
-       latitude=slice(60, 90)
+       latitude=slice(30, 40),
+       longitude=slice(-100, -90)
    )
 
-Time Series Decomposition
--------------------------
+   # 3. Plot the original and decomposed time series components
+   fig, ax = plt.subplots(figsize=(12, 8))
+   decomposition['original'].plot(ax=ax, label="Original")
+   decomposition['trend'].plot(ax=ax, label="Trend")
+   decomposition['seasonal'].plot(ax=ax, label="Seasonal")
+   ax.legend()
+   ax.set_title("Time Series Decomposition")
+   plt.show()
 
-.. code-block:: python
-
-   # Decompose time series
-   decomp = ds.climate_timeseries.decompose_time_series(
+   # 4. Analyze spatial standard deviation of the original data
+   fig_std = ds.climate_timeseries.plot_std_space(
        variable="air",
-       period=12  # Annual cycle
+       title="Spatial Standard Deviation of Air Temperature"
    )
-
-Spatial Statistics
-------------------
-
-.. code-block:: python
-
-   # Plot spatial standard deviation
-   fig = ds.climate_timeseries.plot_std_space(
-       variable="air"
-   )
+   plt.show()
 
 Performance Optimization
 ========================

@@ -23,10 +23,11 @@ Quick Example
    
    ds = xr.open_dataset("temperature_data.nc")
    
-   # Plot mean temperature
+   # Plot mean temperature with a specific projection
    fig = ds.climate_plots.plot_mean(
        variable="air",
-       title="Mean Temperature"
+       title="Mean Temperature",
+       projection="Robinson"
    )
 
 Accessor Class
@@ -82,39 +83,50 @@ Precipitation Indices
 Basic Examples
 ==============
 
-Temperature Plots
------------------
+Comprehensive Plotting Workflow
+--------------------------------
+
+This example demonstrates a complete workflow for creating various climate data visualizations, from basic statistical plots to specialized precipitation indices.
 
 .. code-block:: python
 
-   # Plot mean temperature
-   fig = ds.climate_plots.plot_mean(
+   import xarray as xr
+   import matplotlib.pyplot as plt
+   import climate_diagnostics
+   import numpy as np
+
+   # Load a sample dataset
+   ds = xr.tutorial.load_dataset("air_temperature")
+
+   # Create a dummy precipitation variable for demonstration purposes
+   ds['pr'] = np.abs(ds.air.data - 273.15) / 10
+   ds['pr'].attrs['units'] = 'mm/day'
+
+
+   # 1. Plot mean temperature with a custom projection and colormap
+   fig1 = ds.climate_plots.plot_mean(
        variable="air",
-       title="Mean Air Temperature"
+       title="Mean Air Temperature",
+       projection="Robinson",
+       cmap="viridis"
    )
-   
-   # Plot temperature variability
-   fig = ds.climate_plots.plot_std_time(
+   plt.show()
+
+   # 2. Plot the maximum 1-day precipitation (a common climate index)
+   fig2 = ds.climate_plots.plot_rx1day(
+       variable="pr",
+       title="Maximum 1-Day Precipitation (Rx1day)",
+       projection="PlateCarree"
+   )
+   plt.show()
+
+   # 3. Plot the 95th percentile of spatial temperature data
+   fig3 = ds.climate_plots.plot_percentile_spatial(
        variable="air",
-       title="Temperature Variability"
+       percentile=95,
+       title="95th Percentile of Air Temperature"
    )
-
-Precipitation Analysis
-----------------------
-
-.. code-block:: python
-
-   # Plot annual precipitation
-   fig = ds.climate_plots.plot_annual_sum_mean(
-       variable="prate",
-       title="Annual Mean Precipitation"
-   )
-   
-   # Plot extreme precipitation (RX1DAY)
-   fig = ds.climate_plots.plot_rx1day(
-       variable="prate",
-       title="Maximum 1-Day Precipitation"
-   )
+   plt.show()
 
 Regional Focus
 --------------

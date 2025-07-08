@@ -1,10 +1,9 @@
-
 # Climate Diagnostics Toolkit
 
 [![Documentation](https://img.shields.io/badge/docs-latest-blue.svg)](https://pranay-chakraborty.github.io/climate_diagnostics/)
 [![Python Version](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.1.1-brightgreen.svg)](https://github.com/pranay-chakraborty/climate_diagnostics/releases)
+[![Version](https://img.shields.io/badge/version-1.2.0-brightgreen.svg)](https://github.com/pranay-chakraborty/climate_diagnostics/releases)
 [![Status](https://img.shields.io/badge/status-stable-green.svg)](https://github.com/pranay-chakraborty/climate_diagnostics)
 [![GitHub Actions](https://github.com/pranay-chakraborty/climate_diagnostics/actions/workflows/docs.yml/badge.svg?branch=master)](https://github.com/pranay-chakraborty/climate_diagnostics/actions/workflows/docs.yml)
 [![Issues](https://img.shields.io/github/issues/pranay-chakraborty/climate_diagnostics.svg)](https://github.com/pranay-chakraborty/climate_diagnostics/issues)
@@ -31,17 +30,27 @@ A Python toolkit for analyzing, processing, and visualizing climate data from mo
 - **Temporal Analysis**: Trend detection, STL decomposition, and variability analysis.
 - **Spatial Visualization**: Map plotting with Cartopy and custom projections.
 - **Statistical Diagnostics**: Climate science methods including ETCCDI indices.
+- **Radiative Equilibrium Models**: Functions for simulating radiative and radiative-convective equilibrium.
 - **Multi-model Analysis**: Compare and evaluate climate model outputs.
 - **Performance**: Dask-powered parallel processing for large datasets.
 
 ## Installation
 
-### With pip
+### With pip (from PyPI)
 ```bash
 pip install climate_diagnostics
 ```
 
-### With conda (recommended for all dependencies)
+### With pip (from source)
+For the latest development version:
+```bash
+git clone https://github.com/pranay-chakraborty/climate_diagnostics.git
+cd climate_diagnostics
+pip install -e .
+```
+
+### With conda
+If you prefer to manage your environment with conda, you can use the provided `environment.yml` file:
 ```bash
 conda env create -f environment.yml
 conda activate climate-diagnostics
@@ -50,61 +59,62 @@ pip install -e .
 
 ## Quick Start
 
+This example demonstrates a typical workflow for analyzing and visualizing climate data using this toolkit.
+
 ```python
 import xarray as xr
 from climate_diagnostics import accessors
+from climate_diagnostics.models.rce import create_rce_model
 
-# Open a large dataset
-ds = xr.open_dataset("/path/to/air.mon.mean.nc")
+# 1. Load a dataset
+ds = xr.tutorial.load_dataset("air_temperature")
 
-# Optimize chunking for analysis
-ds = ds.climate_timeseries.optimize_chunks_advanced(
-    operation_type='timeseries',
+# 2. Optimize chunking for spatial trend analysis
+# Use the dynamic calculator for a balance of performance and memory
+optimized_ds = ds.climate_trends.optimize_for_trends(
+    variable="air",
     performance_priority='balanced'
 )
 
-# Plot a mean map
-ds.climate_plots.plot_mean(variable="air", season="djf")
-
-# Analyze trends
-ds.climate_trends.calculate_spatial_trends(
+# 3. Calculate and plot spatial trends with a custom projection
+trends = optimized_ds.climate_trends.calculate_spatial_trends(
     variable="air",
-    num_years=10,
-    latitude=slice(40, 60),
-    longitude=slice(60, 110),
-    optimize_chunks=True
+    num_years=10,  # Trend per decade
+    projection="Robinson"
 )
 
-# Get chunking recommendations
-ds.climate_timeseries.analyze_chunking_strategy()
+# 4. Plot the mean temperature for a specific season
+fig = ds.climate_plots.plot_mean(
+    variable="air", 
+    season="JJA", 
+    title="Mean Summer (JJA) Temperature"
+)
+
+# 5. Run a single-column Radiative-Convective Equilibrium (RCE) model
+rce_model = create_rce_model(integrate_years=2)
+
 ```
 
 ## API Overview
 
 ### Accessors
 
-- `climate_plots`: Geographic and statistical visualizations
-- `climate_timeseries`: Time series analysis and decomposition
-- `climate_trends`: Trend calculation and significance testing
+- `climate_plots`: Geographic and statistical visualizations.
+- `climate_timeseries`: Time series analysis and decomposition.
+- `climate_trends`: Trend calculation and significance testing.
 
-### Example: Time Series
+### Models
+
+- `create_rce_model`: Simulate radiative-convective equilibrium.
+- `create_re_model`: Simulate pure radiative equilibrium.
+
+### Example: Time Series Analysis
 ```python
-ds.climate_timeseries.plot_time_series(
-    latitude=slice(40, 60),
-    longitude=slice(60, 110),
-    level=850,
+# Decompose a time series into trend and seasonal components
+decomposition = ds.climate_timeseries.decompose_time_series(
     variable="air",
-    season="jjas"
-)
-```
-
-### Example: Climate Indices
-```python
-ds.climate_plots.plot_consecutive_wet_days(
-    variable="prate",
-    threshold=1.0,
-    latitude=slice(40, 60),
-    longitude=slice(60, 110)
+    latitude=slice(30, 40),
+    longitude=slice(-100, -90)
 )
 ```
 
@@ -153,7 +163,7 @@ This project is licensed under the [MIT LICENSE](LICENSE).
 If you use Climate Diagnostics Toolkit in your research, please cite:
 
 ```
-Chakraborty, P. (2025) & Muhammed I. K., A. (2025). Climate Diagnostics Toolkit: Tools for analyzing and visualizing climate data using xarray accessors. Version 1.1. https://github.com/pranay-chakraborty/climate_diagnostics
+Chakraborty, P. (2025) & Muhammed I. K., A. (2025). Climate Diagnostics Toolkit: Tools for analyzing and visualizing climate data using xarray accessors. Version 1.2.0. https://github.com/pranay-chakraborty/climate_diagnostics
 ```
 
 For LaTeX users:
@@ -163,7 +173,7 @@ For LaTeX users:
   author = {Chakraborty, Pranay and Muhammed I. K., Adil},
   title = {{Climate Diagnostics Toolkit: Tools for analyzing and visualizing climate data using xarray accessors}},
   year = {2025},
-  version = {1.1},
+  version = {1.2.0},
   publisher = {GitHub},
   url = {https://github.com/pranay-chakraborty/climate_diagnostics},
   note = {[Computer software]}

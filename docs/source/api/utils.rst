@@ -91,39 +91,33 @@ Data Selection
 Advanced Chunking
 -----------------
 
+The `chunking_utils` module provides sophisticated tools for optimizing Dask chunking strategies, which is critical for performance when working with large climate datasets. The `dynamic_chunk_calculator` function automatically determines optimal chunk sizes based on the operation being performed and the desired performance characteristics.
+
 .. code-block:: python
 
-   from climate_diagnostics.utils import (
+   from climate_diagnostics.utils.chunking_utils import (
        dynamic_chunk_calculator, 
        suggest_chunking_strategy,
        print_chunking_info
    )
-   
-   # Analyze current chunking
-   print_chunking_info(ds, detailed=True)
-   
-   # Get chunking recommendations
-   strategy = suggest_chunking_strategy(
-       ds, 
-       operation_type='timeseries',
-       target_mb=100
-   )
-   
-   # Calculate optimal chunks dynamically
+   import xarray as xr
+
+   # Load a sample dataset
+   ds = xr.tutorial.load_dataset("air_temperature")
+
+   # Calculate optimal chunks for a time-series analysis that is memory-intensive
    optimal_chunks = dynamic_chunk_calculator(
-       ds,
-       operation_type='spatial',
-       performance_priority='speed'
+       ds, 
+       operation_type='time-series', 
+       performance_priority='memory'
    )
-   
-   # Select and process data with automatic coordinate handling
-   processed_data = select_process_data(
-       ds,
-       variable="air",
-       latitude=slice(30, 60),
-       longitude=slice(-10, 40),
-       season="jja"  # Summer season
-   )
+   print("Optimal chunks for memory-optimized time-series analysis:", optimal_chunks)
+
+   # Rechunk the dataset with the optimal chunking scheme
+   ds_optimized = ds.chunk(optimal_chunks)
+
+   # Print chunking information to verify
+   print_chunking_info(ds_optimized)
 
 Seasonal Filtering
 ------------------

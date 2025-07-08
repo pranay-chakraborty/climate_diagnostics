@@ -336,7 +336,7 @@ class TimeSeriesAccessor:
     def plot_time_series(self, variable='air', latitude=None, longitude=None, level=None,
                          time_range=None, season='annual', year=None,
                          area_weighted=True, figsize=(16, 10), save_plot_path=None,
-                         optimize_chunks=True, chunk_target_mb=50):
+                         optimize_chunks=True, chunk_target_mb=50, title=None):
         """
         Plot a time series of a spatially averaged variable.
 
@@ -369,6 +369,9 @@ class TimeSeriesAccessor:
             Whether to automatically optimize chunking for performance. Defaults to True.
         chunk_target_mb : float, optional
             Target chunk size in MB for optimization. Defaults to 50 MB.
+        title : str, optional
+            The title for the plot. If not provided, a descriptive title will be
+            generated automatically.
 
         Returns
         -------
@@ -447,10 +450,13 @@ class TimeSeriesAccessor:
         ax.set_ylabel(f"{long_name} ({units})")
         ax.set_xlabel('Time')
 
-        season_display = season.upper() if season.lower() != 'annual' else 'Annual'
-        year_display = f" for {year}" if year is not None else ""
-        weight_display = "Area-Weighted " if area_weighted and get_coord_name(data_selected, ['lat', 'latitude']) in data_selected.dims else ""
-        ax.set_title(f"{season_display}{year_display}: {weight_display}Spatial Mean Time Series of {long_name} ({units})")
+        if title is None:
+            season_display = season.upper() if season.lower() != 'annual' else 'Annual'
+            year_display = f" for {year}" if year is not None else ""
+            weight_display = "Area-Weighted " if area_weighted and get_coord_name(data_selected, ['lat', 'latitude']) in data_selected.dims else ""
+            ax.set_title(f"{season_display}{year_display}: {weight_display}Spatial Mean Time Series of {long_name} ({units})")
+        else:
+            ax.set_title(title)
 
         # --- Step 6: Finalize and save the plot ---
         ax.grid(True, linestyle='--', alpha=0.7)
@@ -588,7 +594,7 @@ class TimeSeriesAccessor:
                               time_range=None, season='annual', year=None,
                               stl_seasonal=13, stl_period=12, area_weighted=True,
                               plot_results=True, figsize=(16, 10), save_plot_path=None,
-                              optimize_chunks=True, chunk_target_mb=75):
+                              optimize_chunks=True, chunk_target_mb=75, title=None):
         """
         Decompose a time series into trend, seasonal, and residual components using STL.
 
@@ -628,6 +634,9 @@ class TimeSeriesAccessor:
             Whether to automatically optimize chunking for STL performance. Defaults to True.
         chunk_target_mb : float, optional
             Target chunk size in MB for optimization. Defaults to 75 MB.
+        title : str, optional
+            The title for the plot. If not provided, a descriptive title will be
+            generated automatically.
 
         Returns
         -------
@@ -737,9 +746,12 @@ class TimeSeriesAccessor:
             # Plot each component
             axes[0].plot(results_dict['original'].index, results_dict['original'].values, label='Observed')
             axes[0].set_ylabel(f"Observed ({units})")
-            title_prefix = f'{season.upper() if season.lower() != "annual" else "Annual"}'
-            year_info = f" for {year}" if year else ""
-            axes[0].set_title(f'{title_prefix}{year_info} Time Series Decomposition: {long_name}')
+            if title is None:
+                title_prefix = f'{season.upper() if season.lower() != "annual" else "Annual"}'
+                year_info = f" for {year}" if year else ""
+                axes[0].set_title(f'{title_prefix}{year_info} Time Series Decomposition: {long_name}')
+            else:
+                axes[0].set_title(title)
 
             axes[1].plot(results_dict['trend'].index, results_dict['trend'].values, label='Trend')
             axes[1].set_ylabel(f"Trend ({units})")
