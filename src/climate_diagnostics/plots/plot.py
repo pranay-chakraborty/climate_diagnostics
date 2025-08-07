@@ -6,7 +6,7 @@ import cartopy.crs as ccrs
 from cartopy.feature import NaturalEarthFeature
 from dask.diagnostics import ProgressBar
 
-from ..utils.data_utils import get_coord_name, filter_by_season
+from ..utils.data_utils import get_coord_name, filter_by_season, select_process_data
 from ..utils.dask_utils import get_or_create_dask_client
 from ..utils.plot_utils import get_projection
 
@@ -594,7 +594,6 @@ class PlotsAccessor:
         """
         get_or_create_dask_client()
         # Step 1: Select the data based on user parameters
-        from ..utils import select_process_data
         selected_data = select_process_data(
             self._obj, variable, latitude, longitude, level, time_range, season, year
         )
@@ -690,7 +689,6 @@ class PlotsAccessor:
         """
         get_or_create_dask_client()
         # Step 1: Select the data based on user parameters
-        from ..utils import select_process_data
         selected_data = select_process_data(
             self._obj, variable, latitude, longitude, level, time_range, season, year
         )

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "climate_diagnostics"
-version = "1.2.0"
+version = "1.3.0"
 description = "Production-ready climate diagnostics tools with advanced chunking optimization for analyzing and visualizing climate data"
 readme = "README.md"
 authors = [

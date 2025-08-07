@@ -1,9 +1,15 @@
 """
-Climate Diagnostics Toolkit
-===========================
+Climate Diagnostics Toolkit v1.3.0
+===================================
 
 A comprehensive Python package for analyzing and visualizing climate data from
 various sources including model output, reanalysis products, and observations.
+
+Version 1.3.0 features a refactored architecture with:
+- Centralized data processing pipeline for enhanced reliability
+- Robust exception handling with specific error types
+- Optimized performance and reduced technical debt
+- Enhanced maintainability and debugging capabilities
 
 This toolkit provides specialized tools for:
 - Temporal analysis (trends, variability, decomposition)
@@ -35,10 +41,10 @@ Examples
 >>> ds.climate_timeseries.decompose_time_series(variable="t2m", latitude=slice(60, 30))
 >>> 
 >>> # Calculate and visualize temperature trends
->>> ds.climate_trends.calculate_spatial_trends(variable="t2m", num_years=10)
+>>> ds.climate_trends.calculate_spatial_trends(variable="t2m", frequency="Y")
 """
 
-__version__ = "1.1.1"
+__version__ = "1.3.0"
 
 # Conditional import of main modules to handle optional dependencies gracefully
 # This allows the package to function even if some optional components are unavailable

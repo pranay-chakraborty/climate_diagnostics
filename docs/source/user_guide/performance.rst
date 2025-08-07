@@ -2,33 +2,32 @@
 Performance Optimization
 ============================
 
-This guide covers performance optimization techniques for the Climate Diagnostics Toolkit, with a focus on sophisticated chunking strategies and memory management for large climate datasets.
+This guide covers performance optimization techniques for the Climate Diagnostics Toolkit, focusing on manual chunking strategies for large climate datasets.
 
-🚀 **Overview**
-================
+Overview
+========
 
-The Climate Diagnostics Toolkit includes advanced performance optimization features:
+For large climate datasets, proper chunking is essential for good performance:
 
-- **Disk-aware chunking** that adapts to file structure
-- **Operation-specific optimization** for different analysis types
-- **Memory-conscious processing** with automatic scaling
-- **Dynamic chunk calculation** based on system resources
+- **Manual chunking** based on your data structure and analysis needs
+- **Memory management** by choosing appropriate chunk sizes
+- **Dask integration** for out-of-core processing
 
-⚡ **Quick Performance Tips**
-==============================
+Quick Performance Tips
+=======================
 
-1. **Always optimize chunking** for your specific analysis type
-2. **Use operation-specific methods** like ``optimize_for_trends()``
-3. **Monitor memory usage** with built-in analysis tools
-4. **Choose appropriate chunk sizes** based on your data frequency
+1. **Use appropriate chunk sizes** for your data and available memory
+2. **Chunk time dimensions** to balance memory usage and computation efficiency  
+3. **Consider your analysis type** when choosing spatial chunk sizes
+4. **Monitor memory usage** during large computations
 
-🔧 **Chunking Strategies**
+Manual Chunking Strategies
 ===========================
 
-Basic Chunking Optimization
-----------------------------
+Basic Manual Chunking
+----------------------
 
-Start with basic chunking optimization for any analysis:
+For most climate analyses, start with manual chunking:
 
 .. code-block:: python
 
@@ -38,281 +37,174 @@ Start with basic chunking optimization for any analysis:
    # Load your dataset
    ds = xr.open_dataset("large_climate_data.nc")
    
-   # Apply basic optimization
-   ds_optimized = ds.climate_timeseries.optimize_chunks(
-       target_mb=50,  # Target 50 MB chunks
-       variable='temperature'
-   )
+   # Apply basic manual chunking
+   ds_chunked = ds.chunk({
+       'time': 120,    # ~10 years of monthly data
+       'lat': 50,      # 50 latitude points per chunk
+       'lon': 50       # 50 longitude points per chunk
+   })
 
-Advanced Chunking Strategies
+Time Series Analysis Chunking
 -----------------------------
 
-For more sophisticated optimization:
-
-.. code-block:: python
-
-   # Advanced optimization with operation-specific tuning
-   ds_advanced = ds.climate_timeseries.optimize_chunks_advanced(
-       operation_type='timeseries',        # 'timeseries', 'spatial', 'statistical'
-       performance_priority='balanced',    # 'memory', 'speed', 'balanced'
-       memory_limit_gb=8.0,               # Set memory limit
-       use_disk_chunks=True               # Preserve spatial disk chunks
-   )
-
-Operation-Specific Optimization
---------------------------------
-
-Different analysis types benefit from different chunking strategies:
-
-**Time Series Analysis:**
+For time series analysis, optimize temporal chunks:
 
 .. code-block:: python
 
    # Optimize for time series operations
-   ds_ts = ds.climate_timeseries.optimize_chunks_advanced(
-       operation_type='timeseries',
-       performance_priority='memory'
-   )
-   
-   # Or use the dedicated method
-   ds_ts = ds.climate_timeseries.optimize_for_decomposition()
+   ds_timeseries = ds.chunk({
+       'time': 240,    # Larger time chunks for time series
+       'lat': -1,      # Keep full spatial extent
+       'lon': -1
+   })
 
-**Trend Analysis:**
+Spatial Analysis Chunking  
+-------------------------
 
-.. code-block:: python
-
-   # Optimize for trend calculations
-   ds_trends = ds.climate_trends.optimize_for_trends(
-       variable='temperature',
-       use_case='spatial_trends'
-   )
-
-**Spatial Analysis:**
+For spatial analysis, optimize spatial chunks:
 
 .. code-block:: python
 
-   # Optimize for spatial operations and plotting
-   ds_spatial = ds.climate_timeseries.optimize_chunks_advanced(
-       operation_type='spatial',
-       performance_priority='speed'
-   )
+   # Optimize for spatial operations
+   ds_spatial = ds.chunk({
+       'time': 12,     # Smaller time chunks
+       'lat': 90,      # Larger spatial chunks
+       'lon': 180
+   })
 
-📊 **Performance Analysis**
-===========================
+Analysis-Specific Recommendations
+=================================
 
-Chunking Analysis Tools
-------------------------
-
-Analyze your current chunking strategy:
+Time Series Decomposition
+-------------------------
 
 .. code-block:: python
 
-   # Print detailed chunking information
-   ds.climate_timeseries.print_chunking_info(detailed=True)
+   # Good chunking for decomposition
+   ds_decomp = ds.chunk({'time': 360, 'lat': 20, 'lon': 20})
    
-   # Get chunking recommendations for different use cases
-   ds.climate_timeseries.analyze_chunking_strategy()
+   # Perform decomposition
+   result = ds_decomp.climate_timeseries.decompose_time_series(
+       variable="temperature",
+       latitude=slice(30, 60)
+   )
 
-Example output:
+Trend Analysis
+--------------
 
-.. code-block:: text
+.. code-block:: python
 
-   Climate Data Chunking Analysis
-   ================================================
+   # Good chunking for trend calculation
+   ds_trend = ds.chunk({'time': -1, 'lat': 30, 'lon': 30})
    
-   Recommended chunking strategies:
+   # Calculate trends
+   trends = ds_trend.climate_trends.calculate_spatial_trends(
+       variable="temperature",
+       frequency="Y"
+   )
+
+Plotting and Visualization
+--------------------------
+
+.. code-block:: python
+
+   # Balanced chunking for plotting
+   ds_plot = ds.chunk({'time': 60, 'lat': 40, 'lon': 40})
    
-   Time Series:
-     Target: 25 MB chunks
-     Max: 100 MB chunks  
-     Chunks: {'time': 48, 'lat': 73, 'lon': 144}
-     Use: Optimized for time series analysis with smaller chunks
-   
-   Spatial Analysis:
-     Target: 100 MB chunks
-     Max: 500 MB chunks
-     Chunks: {'time': 12, 'lat': 145, 'lon': 288}
-     Use: Larger chunks for spatial operations and mapping
+   # Create plots
+   ds_plot.climate_plots.plot_mean(variable="temperature")
 
 Memory Management
+=================
+
+Monitor Memory Usage
+--------------------
+
+.. code-block:: python
+
+   # Check chunk sizes
+   print(f"Chunk sizes: {ds_chunked.chunks}")
+   
+   # Estimate memory usage
+   chunk_size_mb = ds_chunked.temperature.nbytes / (1024**2)
+   print(f"Estimated chunk size: {chunk_size_mb:.1f} MB")
+
+Adaptive Chunking
 -----------------
 
-Monitor and control memory usage:
+Adjust chunks based on your system:
 
 .. code-block:: python
 
-   # Check system memory
-   from climate_diagnostics.utils.chunking_utils import get_system_memory_info
+   import psutil
    
-   memory_info = get_system_memory_info()
-   print(f"Available memory: {memory_info['available']:.1f} GB")
+   # Get available memory
+   available_memory_gb = psutil.virtual_memory().available / (1024**3)
+   print(f"Available memory: {available_memory_gb:.1f} GB")
    
-   # Optimize for memory-constrained systems
-   ds_memory = ds.climate_timeseries.optimize_chunks_advanced(
-       operation_type='general',
-       performance_priority='memory',
-       memory_limit_gb=4.0  # Limit to 4 GB
-   )
-
-🎯 **Best Practices by Data Type**
-===================================
-
-Daily Data (High Frequency)
-----------------------------
-
-.. code-block:: python
-
-   # For daily data (365+ time steps per year)
-   ds_daily = ds.climate_timeseries.optimize_chunks(
-       target_mb=75,
-       time_freq='daily'
-   )
-
-Monthly Data (Standard Climate)
--------------------------------
-
-.. code-block:: python
-
-   # For monthly data (12 time steps per year)
-   ds_monthly = ds.climate_timeseries.optimize_chunks(
-       target_mb=50,
-       time_freq='monthly'
-   )
-
-High-Resolution Spatial Data
-----------------------------
-
-.. code-block:: python
-
-   # For high-resolution grids (>1000x1000)
-   ds_hires = ds.climate_timeseries.optimize_chunks_advanced(
-       operation_type='spatial',
-       performance_priority='memory',
-       memory_limit_gb=8.0
-   )
-
-🔍 **Troubleshooting Performance Issues**
-==========================================
-
-Common Issues and Solutions
-----------------------------
-
-**Memory Errors:**
-
-.. code-block:: python
-
-   # Reduce chunk sizes
-   ds_safe = ds.climate_timeseries.optimize_chunks_advanced(
-       performance_priority='memory',
-       memory_limit_gb=2.0  # Conservative limit
-   )
-
-**Slow Processing:**
-
-.. code-block:: python
-
-   # Increase chunk sizes for speed
-   ds_fast = ds.climate_timeseries.optimize_chunks_advanced(
-       performance_priority='speed',
-       operation_type='spatial'
-   )
-
-**Poor Parallelization:**
-
-.. code-block:: python
-
-   # Ensure sufficient chunks for parallel processing
-   ds_parallel = ds.climate_timeseries.optimize_chunks_advanced(
-       operation_type='general',
-       memory_limit_gb=16.0  # Allow larger memory for more chunks
-   )
-
-📈 **Performance Monitoring**
-==============================
-
-Track Performance Improvements
--------------------------------
-
-.. code-block:: python
-
-   import time
-   from dask.diagnostics import ProgressBar
+   # Adjust chunk size accordingly
+   if available_memory_gb > 16:
+       time_chunk = 240
+       spatial_chunk = 60
+   elif available_memory_gb > 8:
+       time_chunk = 120
+       spatial_chunk = 40
+   else:
+       time_chunk = 60
+       spatial_chunk = 20
    
-   # Time operations with different chunking strategies
-   def time_operation(dataset, operation_name):
-       start = time.time()
-       with ProgressBar():
-           result = dataset.air.mean(['lat', 'lon']).compute()
-       end = time.time()
-       print(f"{operation_name}: {end - start:.2f} seconds")
-       return result
-   
-   # Compare performance
-   time_operation(ds_original, "Original chunking")
-   time_operation(ds_optimized, "Optimized chunking")
+   ds_adaptive = ds.chunk({
+       'time': time_chunk,
+       'lat': spatial_chunk, 
+       'lon': spatial_chunk
+   })
 
-Real-World Examples
--------------------
+Using Chunking Utilities
+------------------------
 
-**Large Climate Model Output:**
+The library provides utilities for chunking analysis:
 
 .. code-block:: python
 
-   # For CMIP6-style data (>10 GB files)
-   ds_cmip = xr.open_dataset("cmip6_tas_daily.nc")
-   ds_cmip_opt = ds_cmip.climate_timeseries.optimize_chunks_advanced(
-       operation_type='timeseries',
-       performance_priority='balanced',
-       memory_limit_gb=12.0,
-       variable='tas'
-   )
+   from climate_diagnostics.utils import print_chunking_info
+   
+   # Check chunk information (utility function)
+   print_chunking_info(ds_chunked, detailed=True)
 
-**Observational Gridded Data:**
+Troubleshooting Performance Issues
+==================================
+
+Common Issues
+-------------
+
+1. **Memory errors**: Reduce chunk sizes
+2. **Slow computation**: Increase chunk sizes (within memory limits)
+3. **Network/IO bottlenecks**: Balance chunk sizes with data access patterns
+
+Example Solutions
+-----------------
 
 .. code-block:: python
 
-   # For observational products (ERA5, etc.)
-   ds_obs = xr.open_dataset("era5_temperature.nc")
-   ds_obs_opt = ds_obs.climate_timeseries.optimize_chunks(
-       target_mb=100,
-       time_freq='hourly',
-       variable='t2m'
-   )
-
-🎛️ **Advanced Configuration**
-===============================
-
-Custom Chunking Strategies
----------------------------
-
-For specialized use cases, you can create custom chunking:
-
-.. code-block:: python
-
-   from climate_diagnostics.utils.chunking_utils import (
-       calculate_optimal_chunks_from_disk,
-       dynamic_chunk_calculator
-   )
+   # If getting memory errors
+   ds_small_chunks = ds.chunk({'time': 30, 'lat': 20, 'lon': 20})
    
-   # Custom disk-aware chunking
-   custom_chunks = calculate_optimal_chunks_from_disk(
-       ds, 
-       target_mb=150,
-       variable='precipitation'
-   )
-   ds_custom = ds.chunk(custom_chunks)
+   # If computation is too slow
+   ds_larger_chunks = ds.chunk({'time': 480, 'lat': 80, 'lon': 80})
    
-   # Dynamic chunking with custom parameters
-   adaptive_chunks = dynamic_chunk_calculator(
-       ds,
-       operation_type='statistical',
-       memory_limit_gb=6.0,
-       performance_priority='speed'
-   )
+   # For network datasets, smaller chunks may be better
+   ds_network = ds.chunk({'time': 60, 'lat': 30, 'lon': 30})
 
-See Also
-========
+Best Practices Summary
+======================
 
-* :doc:`../quickstart` - Getting started with basic optimization
-* :doc:`../api/utils` - Full API reference for chunking utilities
-* :doc:`plotting` - Visualization performance tips
+1. **Start with conservative chunk sizes** and adjust based on performance
+2. **Monitor memory usage** during development
+3. **Test different chunking strategies** for your specific use case
+4. **Document successful chunking patterns** for your datasets
+5. **Use Dask dashboard** to monitor computation progress
+
+.. note::
+   The optimal chunking strategy depends on your specific dataset characteristics,
+   available system resources, and analysis requirements. Experiment with different
+   chunk sizes to find what works best for your use case.

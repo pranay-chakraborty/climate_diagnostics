@@ -47,37 +47,37 @@ Basic Statistical Plots
 .. automethod:: climate_diagnostics.plots.plot.PlotsAccessor.plot_mean
    :no-index:
 
-.. automethod:: climate_diagnostics.plots.plot.PlotsAccessor.plot_std_time
+.. automethod:: climate_diagnostics.plots.plot.PlotsAccessor.plot_std
    :no-index:
 
-.. automethod:: climate_diagnostics.plots.plot.PlotsAccessor.plot_percentile_spatial
+.. automethod:: climate_diagnostics.plots.plot.PlotsAccessor.plot_percentile
    :no-index:
 
 Precipitation Indices
 ---------------------
 
+.. automethod:: climate_diagnostics.plots.plot.PlotsAccessor.plot_prcptot
+   :no-index:
+
 .. automethod:: climate_diagnostics.plots.plot.PlotsAccessor.plot_rx1day
    :no-index:
 
-.. automethod:: climate_diagnostics.plots.plot.PlotsAccessor.plot_rx5day
+.. automethod:: climate_diagnostics.plots.plot.PlotsAccessor.plot_sdii
    :no-index:
 
-.. automethod:: climate_diagnostics.plots.plot.PlotsAccessor.plot_wet_spell_duration
+.. automethod:: climate_diagnostics.plots.plot.PlotsAccessor.plot_cdd
    :no-index:
 
-.. automethod:: climate_diagnostics.plots.plot.PlotsAccessor.plot_dry_spell_duration
+Temperature and Extreme Indices
+------------------------------
+
+.. automethod:: climate_diagnostics.plots.plot.PlotsAccessor.plot_days_above_threshold
    :no-index:
 
-.. automethod:: climate_diagnostics.plots.plot.PlotsAccessor.plot_consecutive_wet_days
+.. automethod:: climate_diagnostics.plots.plot.PlotsAccessor.plot_wsdi
    :no-index:
 
-.. automethod:: climate_diagnostics.plots.plot.PlotsAccessor.plot_consecutive_dry_days
-   :no-index:
-
-.. automethod:: climate_diagnostics.plots.plot.PlotsAccessor.plot_precipitation_above_threshold
-   :no-index:
-
-.. automethod:: climate_diagnostics.plots.plot.PlotsAccessor.plot_annual_sum_mean
+.. automethod:: climate_diagnostics.plots.plot.PlotsAccessor.plot_csdi
    :no-index:
 
 Basic Examples
@@ -121,7 +121,7 @@ This example demonstrates a complete workflow for creating various climate data 
    plt.show()
 
    # 3. Plot the 95th percentile of spatial temperature data
-   fig3 = ds.climate_plots.plot_percentile_spatial(
+   fig3 = ds.climate_plots.plot_percentile(
        variable="air",
        percentile=95,
        title="95th Percentile of Air Temperature"
@@ -166,7 +166,7 @@ Working with Different Variables
    
    # Precipitation data (if available)
    if "prate" in ds.data_vars:
-       precip_fig = ds.climate_plots.plot_annual_sum_mean(variable="prate")
+       precip_fig = ds.climate_plots.plot_prcptot(variable="prate")
        
    # Check available variables
    print("Available variables:", list(ds.data_vars))

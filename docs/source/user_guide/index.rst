@@ -4,7 +4,7 @@ User Guide
 
 Comprehensive documentation for using the Climate Diagnostics Toolkit effectively.
 
-📚 **Guide Sections**
+Guide Sections
 =====================
 
 .. toctree::
@@ -13,13 +13,13 @@ Comprehensive documentation for using the Climate Diagnostics Toolkit effectivel
    plotting
    performance
 
-🎯 **What's Covered**
+What's Covered
 ======================
 
 .. grid:: 2
    :gutter: 3
 
-   .. grid-item-card:: 🗺️ Plotting Guide
+   .. grid-item-card:: Plotting Guide
       :text-align: center
 
       Master climate visualizations
@@ -33,7 +33,7 @@ Comprehensive documentation for using the Climate Diagnostics Toolkit effectivel
          
          Learn Plotting
 
-   .. grid-item-card:: ⚡ Performance Guide
+   .. grid-item-card:: Performance Guide
       :text-align: center
 
       Optimize chunking for speed
@@ -47,7 +47,7 @@ Comprehensive documentation for using the Climate Diagnostics Toolkit effectivel
          
          Optimize Performance
 
-   .. grid-item-card:: 📈 Time Series Guide
+   .. grid-item-card:: Time Series Guide
       :text-align: center
 
       Temporal analysis techniques
@@ -56,7 +56,7 @@ Comprehensive documentation for using the Climate Diagnostics Toolkit effectivel
       
       See :doc:`../api/timeseries` for API reference
 
-   .. grid-item-card:: 📊 Trends Guide
+   .. grid-item-card:: Trends Guide
       :text-align: center
 
       Statistical trend detection

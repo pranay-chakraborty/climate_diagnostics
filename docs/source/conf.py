@@ -13,8 +13,8 @@ sys.path.insert(0, os.path.abspath('../../src'))
 project = 'Climate Diagnostics Toolkit'
 copyright = '2025, Pranay Chakraborty, Adil Muhammed I. K.'
 author = 'Pranay Chakraborty, Adil Muhammed I. K.'
-release = '1.1.1'
-version = '1.1.1'
+release = '1.3.0'
+version = '1.3.0'
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration

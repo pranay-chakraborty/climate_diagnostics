@@ -170,9 +170,8 @@ class TestTrendsAccessor(unittest.TestCase):
             variable='air',
             latitude=slice(-20, 20),
             longitude=slice(-30, 30),
-            num_years=1,
-            plot_map=False,
-            n_workers=1  # Use single worker for testing
+            frequency="Y",
+            plot_map=False
         )
         
         self.assertIsInstance(result, xr.DataArray)
@@ -188,9 +187,8 @@ class TestTrendsAccessor(unittest.TestCase):
             variable='air',
             latitude=slice(-10, 10),
             longitude=slice(-20, 20),
-            num_years=10,  # Decadal trends
-            plot_map=True,
-            n_workers=1
+            frequency="Y",  # Annual trends
+            plot_map=True
         )
         
         self.assertIsInstance(result, xr.DataArray)
@@ -202,21 +200,19 @@ class TestTrendsAccessor(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.ds.climate_trends.calculate_spatial_trends(variable='nonexistent_var')
         
-        # Test with invalid num_years
+        # Test with invalid frequency
         with self.assertRaises(ValueError):
-            self.ds.climate_trends.calculate_spatial_trends(variable='air', num_years=0)
-        
-        # Test with invalid n_workers
-        with self.assertRaises(ValueError):
-            self.ds.climate_trends.calculate_spatial_trends(variable='air', n_workers=0)
+            self.ds.climate_trends.calculate_spatial_trends(variable='air', frequency='X')
     
-    def test_optimize_for_trends(self):
-        """Test the optimize_for_trends method."""
-        # This may return None if chunking utilities are not available
-        result = self.ds.climate_trends.optimize_for_trends(variable='air')
-        
-        # Should return either an optimized dataset or None
-        self.assertTrue(result is None or isinstance(result, xr.Dataset))
+    def test_chunking_recommendation(self):
+        """Test that the accessor recommends chunking for better performance."""
+        # This is a placeholder test for chunking awareness
+        # The actual accessor warns about chunking, so this tests that the method exists
+        result = self.ds.climate_trends.calculate_spatial_trends(
+            variable='air',
+            plot_map=False
+        )
+        self.assertIsInstance(result, xr.DataArray)
     
     @patch('matplotlib.pyplot.savefig')
     @patch('matplotlib.pyplot.show')
@@ -293,17 +289,16 @@ def test_trend_calculation_seasons(trend_dataset, season):
         assert 'trend_statistics' in result
 
 
-@pytest.mark.parametrize("num_years", [1, 5, 10])
-def test_spatial_trends_different_periods(trend_dataset, num_years):
-    """Test spatial trends with different time periods."""
+@pytest.mark.parametrize("frequency", ["Y", "M", "D"])
+def test_spatial_trends_different_frequencies(trend_dataset, frequency):
+    """Test spatial trends with different frequency settings."""
     with patch('matplotlib.pyplot.show'), patch('matplotlib.pyplot.figure'):
         result = trend_dataset.climate_trends.calculate_spatial_trends(
             variable='temperature',
             latitude=slice(-15, 15),
             longitude=slice(-30, 30),
-            num_years=num_years,
-            plot_map=False,
-            n_workers=1
+            frequency=frequency,
+            plot_map=False
         )
         assert isinstance(result, xr.DataArray)
 

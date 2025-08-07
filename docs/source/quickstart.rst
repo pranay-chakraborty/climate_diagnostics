@@ -32,22 +32,11 @@ For large datasets, optimize chunking for better performance:
 
 .. code-block:: python
 
-   # Check current chunking status
-   ds.climate_timeseries.print_chunking_info()
+   # For large datasets - optimize chunks manually for time series operations
+   ds = ds.chunk({'time': 120, 'lat': 50, 'lon': 50})  # Manual chunking
    
-   # Get chunking recommendations
-   recommendations = ds.climate_timeseries.analyze_chunking_strategy()
-   
-   # Optimize chunks for time series operations
-   ds_optimized = ds.climate_timeseries.optimize_chunks_advanced(
-       operation_type='timeseries',
-       performance_priority='memory'  # 'speed', 'memory', or 'balanced'
-   )
-   
-   # For spatial operations
-   ds_spatial = ds.climate_trends.optimize_for_trends(
-       performance_priority='speed'
-   )
+   # For spatial operations - optimize for time series processing
+   ds_spatial = ds  # Use the dataset directly
 
 First Visualization
 ===================
@@ -121,7 +110,7 @@ Calculate and visualize trends:
    # This method plots the trends automatically when plot_map=True (default)
    trends = ds.climate_trends.calculate_spatial_trends(
        variable="air",
-       num_years=1,  # Trend per year
+       frequency="Y",  # Trend per year
        plot_map=True  # Shows the trend map
    )
    
@@ -284,7 +273,7 @@ Here are some common analysis patterns:
 
    # Analyze seasonal cycle
    seasonal_cycle = ds.groupby("time.month").mean("time")
-   seasonal_cycle.climate_plots.plot_cycle(variable="air")
+   seasonal_cycle.plot()
 
 **Extreme Events:**
 
@@ -298,6 +287,6 @@ Here are some common analysis patterns:
 Need Help?
 ==========
 
-- 📖 **Documentation**: You're reading it!
+- **Documentation**: Complete documentation with examples
 - 🐛 **Issues**: `GitHub Issues <https://github.com/pranay-chakraborty/climate_diagnostics/issues>`_
 - 💬 **Discussions**: `GitHub Discussions <https://github.com/pranay-chakraborty/climate_diagnostics/discussions>`_

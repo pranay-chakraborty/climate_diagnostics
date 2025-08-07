@@ -4,12 +4,12 @@ Plotting Guide
 
 Learn to create climate visualizations with the Climate Diagnostics Toolkit.
 
-🎨 **Overview**
+Overview
 ================
 
 The ``climate_plots`` accessor provides visualization capabilities designed for climate data. All plotting functions integrate with Cartopy for geographic projections and matplotlib for customization.
 
-🗺️ **Geographic Plots**
+Geographic Plots
 =======================
 
 **Basic Map Plotting**
@@ -59,7 +59,7 @@ The ``climate_plots`` accessor provides visualization capabilities designed for 
            title=f"{season} Mean Temperature"
        )
 
-🎨 **Styling and Customization**
+Styling and Customization
 =================================
 
 **Color Schemes**
@@ -108,7 +108,7 @@ The ``climate_plots`` accessor provides visualization capabilities designed for 
        source="ERA5 Reanalysis"
    )
 
-📊 **Statistical Overlays**
+Statistical Overlays
 ============================
 
 **Significance Testing**
@@ -134,7 +134,7 @@ The ``climate_plots`` accessor provides visualization capabilities designed for 
        show_confidence=True
    )
 
-📈 **Multiple Variables**
+Multiple Variables
 ==========================
 
 **Side-by-Side Comparison**
@@ -169,7 +169,7 @@ The ``climate_plots`` accessor provides visualization capabilities designed for 
        center=0  # Center colormap at zero
    )
 
-🎯 **Best Practices**
+Best Practices
 ======================
 
 .. tip::
@@ -193,7 +193,7 @@ The ``climate_plots`` accessor provides visualization capabilities designed for 
    - Consider downsampling for quick previews
    - Cache processed data when possible
 
-🔧 **Advanced Techniques**
+Advanced Techniques
 ===========================
 
 **Custom Colormaps**
@@ -231,7 +231,7 @@ The ``climate_plots`` accessor provides visualization capabilities designed for 
        ax = plt.subplot(2, 3, 5+i)
        region_data.climate_plots.plot_mean(ax=ax)
 
-🖼️ **Output Options**
+Output Options
 =====================
 
 **High-Resolution Output**

@@ -3,13 +3,15 @@
 [![Documentation](https://img.shields.io/badge/docs-latest-blue.svg)](https://pranay-chakraborty.github.io/climate_diagnostics/)
 [![Python Version](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.2.0-brightgreen.svg)](https://github.com/pranay-chakraborty/climate_diagnostics/releases)
+[![Version](https://img.shields.io/badge/version-1.3.0-brightgreen.svg)](https://github.com/pranay-chakraborty/climate_diagnostics/releases)
 [![Status](https://img.shields.io/badge/status-stable-green.svg)](https://github.com/pranay-chakraborty/climate_diagnostics)
 [![GitHub Actions](https://github.com/pranay-chakraborty/climate_diagnostics/actions/workflows/docs.yml/badge.svg?branch=master)](https://github.com/pranay-chakraborty/climate_diagnostics/actions/workflows/docs.yml)
 [![Issues](https://img.shields.io/github/issues/pranay-chakraborty/climate_diagnostics.svg)](https://github.com/pranay-chakraborty/climate_diagnostics/issues)
 [![GitHub Stars](https://img.shields.io/github/stars/pranay-chakraborty/climate_diagnostics.svg)](https://github.com/pranay-chakraborty/climate_diagnostics/stargazers)
 
 A Python toolkit for analyzing, processing, and visualizing climate data from model output, reanalysis, and observations. Built on xarray, it provides specialized accessors for time series analysis, trend calculations, and spatial diagnostics with chunking optimization and parallel processing support.
+
+**Version 1.3.0** - Features a refactored architecture with centralized data processing, enhanced exception handling, and optimized performance for scientific computing workflows.
 
 ## Table of Contents
 
@@ -25,8 +27,10 @@ A Python toolkit for analyzing, processing, and visualizing climate data from mo
 
 ## Key Features
 
+- **Production-Ready Architecture**: Centralized data processing pipeline with robust exception handling and optimized performance.
 - **xarray Integration**: Access features via `.climate_plots`, `.climate_timeseries`, and `.climate_trends` accessors on xarray Datasets.
 - **Chunking Optimization**: Memory-efficient chunking strategies for large datasets.
+- **Enhanced Reliability**: Specific exception handling provides clear error messages and improved debugging experience.
 - **Temporal Analysis**: Trend detection, STL decomposition, and variability analysis.
 - **Spatial Visualization**: Map plotting with Cartopy and custom projections.
 - **Statistical Diagnostics**: Climate science methods including ETCCDI indices.
@@ -69,28 +73,21 @@ from climate_diagnostics.models.rce import create_rce_model
 # 1. Load a dataset
 ds = xr.tutorial.load_dataset("air_temperature")
 
-# 2. Optimize chunking for spatial trend analysis
-# Use the dynamic calculator for a balance of performance and memory
-optimized_ds = ds.climate_trends.optimize_for_trends(
+# 2. Calculate and plot spatial trends with a custom projection
+trends = ds.climate_trends.calculate_spatial_trends(
     variable="air",
-    performance_priority='balanced'
-)
-
-# 3. Calculate and plot spatial trends with a custom projection
-trends = optimized_ds.climate_trends.calculate_spatial_trends(
-    variable="air",
-    num_years=10,  # Trend per decade
+    frequency="Y",  # Annual trends
     projection="Robinson"
 )
 
-# 4. Plot the mean temperature for a specific season
+# 3. Plot the mean temperature for a specific season
 fig = ds.climate_plots.plot_mean(
     variable="air", 
     season="JJA", 
     title="Mean Summer (JJA) Temperature"
 )
 
-# 5. Run a single-column Radiative-Convective Equilibrium (RCE) model
+# 4. Run a single-column Radiative-Convective Equilibrium (RCE) model
 rce_model = create_rce_model(integrate_years=2)
 
 ```
@@ -99,14 +96,20 @@ rce_model = create_rce_model(integrate_years=2)
 
 ### Accessors
 
-- `climate_plots`: Geographic and statistical visualizations.
-- `climate_timeseries`: Time series analysis and decomposition.
-- `climate_trends`: Trend calculation and significance testing.
+- **`climate_plots`**: Geographic and statistical visualizations including:
+  - `plot_mean()`, `plot_std()`, `plot_percentile()`
+  - `plot_prcptot()`, `plot_sdii()`, `plot_days_above_threshold()`
+  - `plot_cdd()`, `plot_wsdi()`, `plot_csdi()`
+- **`climate_timeseries`**: Time series analysis and decomposition:
+  - `plot_time_series()`, `plot_std_space()`
+  - `decompose_time_series()`
+- **`climate_trends`**: Trend calculation and significance testing:
+  - `calculate_trend()`, `calculate_spatial_trends()`
 
 ### Models
 
-- `create_rce_model`: Simulate radiative-convective equilibrium.
-- `create_re_model`: Simulate pure radiative equilibrium.
+- `create_rce_model()`: Simulate radiative-convective equilibrium
+- `create_re_model()`: Simulate pure radiative equilibrium
 
 ### Example: Time Series Analysis
 ```python
@@ -163,7 +166,7 @@ This project is licensed under the [MIT LICENSE](LICENSE).
 If you use Climate Diagnostics Toolkit in your research, please cite:
 
 ```
-Chakraborty, P. (2025) & Muhammed I. K., A. (2025). Climate Diagnostics Toolkit: Tools for analyzing and visualizing climate data using xarray accessors. Version 1.2.0. https://github.com/pranay-chakraborty/climate_diagnostics
+Chakraborty, P. (2025) & Muhammed I. K., A. (2025). Climate Diagnostics Toolkit: Tools for analyzing and visualizing climate data using xarray accessors. Version 1.3.0. https://github.com/pranay-chakraborty/climate_diagnostics
 ```
 
 For LaTeX users:
@@ -173,7 +176,7 @@ For LaTeX users:
   author = {Chakraborty, Pranay and Muhammed I. K., Adil},
   title = {{Climate Diagnostics Toolkit: Tools for analyzing and visualizing climate data using xarray accessors}},
   year = {2025},
-  version = {1.2.0},
+  version = {1.3.0},
   publisher = {GitHub},
   url = {https://github.com/pranay-chakraborty/climate_diagnostics},
   note = {[Computer software]}

@@ -28,7 +28,7 @@ Quick Example
    # Calculate spatial trends
    trends = ds.climate_trends.calculate_spatial_trends(
        variable="air",
-       num_years=10  # Trend per decade
+       frequency="Y"  # Trend per year
    )
 
 Accessor Class
@@ -54,12 +54,6 @@ Spatial Trend Analysis
 .. automethod:: climate_diagnostics.TimeSeries.Trends.TrendsAccessor.calculate_spatial_trends
    :no-index:
 
-Optimization Methods
---------------------
-
-.. automethod:: climate_diagnostics.TimeSeries.Trends.TrendsAccessor.optimize_for_trends
-   :no-index:
-
 Basic Examples
 ==============
 
@@ -83,7 +77,7 @@ Spatial Trends
    # Calculate spatial trends (creates plot automatically)
    trends = ds.climate_trends.calculate_spatial_trends(
        variable="air",
-       num_years=1,  # Trend per year
+       frequency="Y",  # Trend per year
        plot_map=True
    )
 
@@ -105,7 +99,7 @@ Regional Trend Comparison
        # Calculate trend for the region using spatial trends
        trend_result = regional_data.climate_trends.calculate_spatial_trends(
            variable="air",
-           num_years=30,
+           frequency="Y",
            plot_map=False  # Don't plot individual regions
        )
        
@@ -130,7 +124,7 @@ Working with Trend Results
    # Calculate trends and work with results
    trends = ds.climate_trends.calculate_spatial_trends(
        variable="air",
-       num_years=10,
+       frequency="Y",
        plot_map=False  # Don't auto-plot
    )
    
@@ -146,26 +140,8 @@ Working with Trend Results
    ax.set_title("Temperature Trends (K/decade)")
    plt.show()
 
-Performance Optimization for Trends
+Performance Tips for Large Datasets
 ===================================
-
-Optimizing Large Datasets
--------------------------
-
-.. code-block:: python
-
-   # Optimize dataset for trend analysis
-   ds_optimized = ds.climate_trends.optimize_for_trends(
-       variable="air",
-       use_case='trend_analysis'
-   )
-   
-   # Calculate trends on optimized dataset
-   trends = ds_optimized.climate_trends.calculate_spatial_trends(
-       variable="air",
-       num_years=30,
-       optimize_chunks=True
-   )
 
 Memory-Efficient Trend Workflows
 --------------------------------
@@ -176,25 +152,19 @@ Memory-Efficient Trend Workflows
    import xarray as xr
    import climate_diagnostics
    
-   # Load large climate dataset
+   # Load large climate dataset and chunk for efficiency
    ds = xr.open_dataset("large_climate_model.nc")
-   
-   # Optimize for trend calculations
-   ds_opt = ds.climate_trends.optimize_for_trends(
-       variable="temperature"
-   )
+   ds = ds.chunk({'time': 120, 'lat': 50, 'lon': 50})
    
    # Calculate long-term trends efficiently
-   long_term_trends = ds_opt.climate_trends.calculate_spatial_trends(
+   long_term_trends = ds.climate_trends.calculate_spatial_trends(
        variable="temperature",
-       num_years=50,  # 50-year trends
-       n_workers=8,   # Use 8 parallel workers
-       optimize_chunks=True,
-       chunk_target_mb=150
+       frequency="Y",  # Annual trends
+       plot_map=True
    )
    
    # Calculate regional trend time series
-   regional_trend = ds_opt.climate_trends.calculate_trend(
+   regional_trend = ds.climate_trends.calculate_trend(
        variable="temperature",
        latitude=slice(30, 60),
        longitude=slice(-120, -80),

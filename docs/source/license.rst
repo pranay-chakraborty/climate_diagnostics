@@ -4,7 +4,7 @@ License
 
 The Climate Diagnostics Toolkit is released under the MIT License.
 
-📄 **MIT License**
+MIT License
 ==================
 
 Copyright (c) 2025 Pranay Chakraborty, Adil Muhammed I. K.
@@ -32,11 +32,11 @@ SOFTWARE.
 
 The MIT License is a permissive license that allows you to:
 
-✅ **Use** the software commercially
-✅ **Modify** the source code
-✅ **Distribute** copies of the software
-✅ **Include** in private use
-✅ **Sublicense** under different terms
+- **Use** the software commercially
+- **Modify** the source code
+- **Distribute** copies of the software
+- **Include** in private use
+- **Sublicense** under different terms
 
 ❌ **With the condition that:**
 - Include the original license and copyright notice
