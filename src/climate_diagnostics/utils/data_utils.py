@@ -9,8 +9,7 @@ from .coord_utils import get_coord_name, filter_by_season
 def validate_and_get_sel_slice(
     coord_val_param: Union[float, int, slice, List, np.ndarray], 
     data_coord: xr.DataArray, 
-    coord_name_str: str, 
-    is_datetime_intent: bool = False
+    coord_name_str: str
 ) -> Tuple[Union[float, int, slice, List, np.ndarray], bool]:
     """
     Validate a coordinate selection parameter against the data's coordinate range.
@@ -23,8 +22,6 @@ def validate_and_get_sel_slice(
         The data coordinate array to validate against
     coord_name_str : str
         Name of the coordinate for error messages
-    is_datetime_intent : bool, optional
-        Whether the coordinate is intended to be datetime, by default False
         
     Returns
     -------
@@ -59,7 +56,11 @@ def validate_and_get_sel_slice(
         needs_nearest_for_this_coord = isinstance(coord_val_param, (int, float, np.number))
 
     # Special handling for datetime coordinates (time-related selections)
-    if is_datetime_intent:
+    # The check is now done on the data's type directly
+    is_datetime_coord = np.issubdtype(data_coord.dtype, np.datetime64) or \
+                        (data_coord.size > 0 and hasattr(data_coord.values[0], 'calendar'))  # Check for cftime
+
+    if is_datetime_coord:
         comp_data_min, comp_data_max = _validate_datetime_coordinates(
             coord_val_param, data_coord, coord_name_str, 
             comp_req_min, comp_req_max, min_data_val_raw, max_data_val_raw
@@ -110,11 +111,12 @@ def _validate_datetime_coordinates(
                 # Direct conversion for datetime objects
                 comp_data_min = np.datetime64(min_data_val_raw)
                 comp_data_max = np.datetime64(max_data_val_raw)
-        elif hasattr(min_data_val_raw, 'year'):
+        elif hasattr(min_data_val_raw, 'year') or hasattr(min_data_val_raw, 'month'):
+            # Handle cftime objects and other datetime-like objects
             comp_data_min = np.datetime64(min_data_val_raw)
             comp_data_max = np.datetime64(max_data_val_raw)
 
-    except Exception as e:
+    except (ValueError, TypeError) as e:
         warnings.warn(
             f"Could not fully process/validate {coord_name_str} range "
             f"'{coord_val_param}' against data bounds due to type issues: {e}. "
@@ -200,28 +202,50 @@ def select_process_data(
         if season.lower() != 'annual':
             data_var = filter_by_season(data_var, season)
             if data_var[time_name].size == 0:
-                raise ValueError(f"No data available after season ('{season}') filter.")
+                warnings.warn(f"No data available after season ('{season}') filter.", UserWarning)
         
         if year is not None:
             try:
                 year_match_bool = data_var[time_name].dt.year == year
             except (AttributeError, TypeError):
+                # Fallback: Compute time coordinate and check year manually
+                warnings.warn(
+                    f"Could not use .dt accessor for year filtering on '{time_name}'. "
+                    "Falling back to manual iteration (may be slow).",
+                    UserWarning
+                )
+                computed_time_data = data_var[time_name].compute().data
+                year_matches = []
+                for t in computed_time_data:
+                    try:
+                        # Check if the time element has a .year attribute
+                        match = (t.year == year)
+                    except AttributeError:
+                        # If t doesn't have .year, we can't match it. Treat as False or warn.
+                        warnings.warn(
+                            f"Time element '{t}' (type {type(t)}) lacks a .year attribute. Skipping.",
+                            UserWarning
+                        )
+                        match = False  # Or handle differently if needed
+                    year_matches.append(match)
+
                 year_match_bool = xr.DataArray(
-                    [t.year == year for t in data_var[time_name].compute().data],
-                    coords={time_name: data_var[time_name]}, dims=[time_name]
+                    year_matches,
+                    coords={time_name: data_var[time_name]},
+                    dims=[time_name]
                 )
             data_var = data_var.sel({time_name: year_match_bool})
             if data_var[time_name].size == 0:
-                raise ValueError(f"No data for year {year} (after season '{season}' filter).")
+                warnings.warn(f"No data for year {year} (after any preceding filters).", UserWarning)
 
         if time_range is not None:
-            sel_val, _ = validate_and_get_sel_slice(time_range, data_var[time_name], "time", True)
+            sel_val, _ = validate_and_get_sel_slice(time_range, data_var[time_name], "time")
             data_var = data_var.sel({time_name: sel_val})
             if data_var[time_name].size == 0:
-                raise ValueError("No data after time_range selection.")
+                warnings.warn("No data after time_range selection.", UserWarning)
     elif season.lower() != 'annual' or year is not None or time_range is not None :
-            print(f"Warning: Temporal filters (season, year, time_range) requested, "
-                    f"but time dimension ('{time_name}') not found or not a dimension in variable '{variable}'.")
+            warnings.warn(f"Temporal filters (season, year, time_range) requested, "
+                    f"but time dimension ('{time_name}') not found or not a dimension in variable '{variable}'.", UserWarning)
 
     selection_dict = {}
     method_dict = {}
@@ -239,40 +263,31 @@ def select_process_data(
         if needs_nearest: method_dict[lon_name] = 'nearest'
     
     level_name = get_coord_name(xarray_obj, ['level', 'lev', 'plev', 'height', 'altitude', 'depth', 'z'])
-    if level_name and level_name in data_var.dims:
-        if level is not None:
-            if isinstance(level, (slice, list, np.ndarray)): 
-                sel_val, _ = validate_and_get_sel_slice(level, data_var[level_name], "level")
-                print(f"Averaging over levels: {level}")
-                with xr.set_options(keep_attrs=True):
-                    data_to_avg = data_var.sel({level_name: sel_val})
-                    if level_name in data_to_avg.dims and data_to_avg.sizes[level_name] > 1:
-                            data_var = data_to_avg.mean(dim=level_name)
-                    else:
-                            data_var = data_to_avg
-            else: 
-                sel_val, needs_nearest = validate_and_get_sel_slice(level, data_var[level_name], "level")
-                selection_dict[level_name] = sel_val
-                if needs_nearest: method_dict[level_name] = 'nearest'
-        elif data_var.sizes[level_name] > 1: 
-            first_level_val = data_var[level_name].isel({level_name: 0}).item()
-            selection_dict[level_name] = first_level_val
-            print(f"Warning: Multiple levels found in '{variable}'. Using first level: {first_level_val}")
+    if level is not None and level_name and level_name in data_var.coords:
+        sel_val, needs_nearest = validate_and_get_sel_slice(level, data_var[level_name], "level")
+        selection_dict[level_name] = sel_val
+        if needs_nearest: 
+            method_dict[level_name] = 'nearest'
+    elif level_name and level_name in data_var.dims and data_var.sizes[level_name] > 1 and level is None:
+        # Helpful default: if levels exist but none are specified, select the first one
+        first_level_val = data_var[level_name].isel({level_name: 0}).item()
+        selection_dict[level_name] = first_level_val
+        warnings.warn(f"Multiple levels found in '{variable}'. Using first level: {first_level_val}", UserWarning)
     elif level is not None:
-        print(f"Warning: Level dimension '{level_name}' not found or not a dimension in '{variable}'. Ignoring 'level' parameter.")
+        warnings.warn(f"Level dimension '{level_name}' not found *as a dimension* in '{variable}'. Ignoring 'level' parameter.", UserWarning)
 
     if selection_dict:
         if any(isinstance(v, slice) for v in selection_dict.values()) and method_dict:
-            print("Note: Applying selections. Slices will be used directly, 'nearest' for scalar points if specified.")
+            warnings.warn("Applying selections. Slices will be used directly, 'nearest' for scalar points if specified.", UserWarning)
         try:
             data_var = data_var.sel(selection_dict, method=method_dict if method_dict else None)
         except Exception as e:
-            print(f"Error during final .sel() operation: {e}")
-            print(f"Selection dictionary: {selection_dict}, Method dictionary: {method_dict}")
+            warnings.warn(f"Error during final .sel() operation: {e}", UserWarning)
+            warnings.warn(f"Selection dictionary: {selection_dict}, Method dictionary: {method_dict}", UserWarning)
             raise
 
     if data_var.size == 0:
-        print("Warning: Selection resulted in an empty DataArray.")
+        raise ValueError("The final selection resulted in an empty DataArray. Check your selection parameters (latitude, longitude, time_range, year, season).")
     return data_var
 
 
@@ -293,11 +308,21 @@ def get_spatial_mean(data_var, area_weighted=True):
         return data_var
 
     if area_weighted and lat_name in spatial_dims_present:
-        weights = np.cos(np.deg2rad(data_var[lat_name]))
+        # Assume latitude is in degrees for np.cos(np.deg2rad(...)).
+        # Check units if coordinate attributes provide them (optional robustness).
+        lat_coord = data_var[lat_name]
+        lat_units = getattr(lat_coord, 'units', None)  # Get 'units' attribute if it exists
+        if lat_units and 'degree' not in lat_units.lower():
+            warnings.warn(
+                f"Calculating area-weighted mean assuming latitude ('{lat_name}') is in degrees, "
+                f"but coordinate units are '{lat_units}'. Weights might be incorrect.",
+                UserWarning
+            )
+        weights = np.cos(np.deg2rad(lat_coord))
         weights.name = "weights"
-        print("Calculating area-weighted spatial mean.")
+        warnings.warn("Calculating area-weighted spatial mean.", UserWarning)
         return data_var.weighted(weights).mean(dim=spatial_dims_present, skipna=True)
     else:
         weight_msg = "(unweighted)" if lat_name in spatial_dims_present and not area_weighted else ""
-        print(f"Calculating simple spatial mean {weight_msg}.")
+        warnings.warn(f"Calculating simple spatial mean {weight_msg}.", UserWarning)
         return data_var.mean(dim=spatial_dims_present, skipna=True) 

@@ -3,20 +3,16 @@ import xarray as xr
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import warnings
 from dask.diagnostics import ProgressBar
-from statsmodels.tsa.seasonal import STL
 from ..utils import get_coord_name, filter_by_season, get_or_create_dask_client, select_process_data, get_spatial_mean
 
-# Try to import chunking utilities
+# Try to import statsmodels for time series decomposition
 try:
-    from ..utils.chunking_utils import (
-        get_optimal_chunks, rechunk_dataset, print_chunking_info, 
-        dynamic_chunk_calculator, calculate_optimal_chunks_from_disk,
-        inspect_disk_chunking, suggest_chunking_strategy
-    )
-    CHUNKING_AVAILABLE = True
+    from statsmodels.tsa.seasonal import STL
+    STATSMODELS_AVAILABLE = True
 except ImportError:
-    CHUNKING_AVAILABLE = False
+    STATSMODELS_AVAILABLE = False
 
 @xr.register_dataset_accessor("climate_timeseries")
 class TimeSeriesAccessor:
@@ -33,298 +29,18 @@ class TimeSeriesAccessor:
         """Initialize the accessor with a Dataset object."""
         self._obj = xarray_obj
 
-    # --------------------------------------------------------------------------
-    # CHUNKING AND OPTIMIZATION METHODS
-    # --------------------------------------------------------------------------
-    def optimize_chunks(self, target_mb: float = 50, max_mb: float = 200,
-                       variable: Optional[str] = None, time_freq: Optional[str] = None,
-                       inplace: bool = False):
+    def _warn_if_not_chunked(self, variable: str):
         """
-        Optimize dataset chunking for better time series analysis performance.
-        
-        This method applies intelligent chunking strategies specifically tuned for
-        time series operations. It analyzes the dataset structure and applies
-        memory-efficient chunking that balances:
-        - Memory usage (target chunk sizes)
-        - Computational efficiency (parallel processing)
-        - I/O performance (disk access patterns)
-        
-        The chunking strategy preserves spatial chunks from disk when beneficial
-        and optimizes time dimension chunking for typical time series workflows.
-        
-        Parameters
-        ----------
-        target_mb : float, optional
-            Target chunk size in megabytes. Defaults to 50 MB.
-            This is the "sweet spot" for most time series operations.
-        max_mb : float, optional
-            Maximum chunk size in megabytes. Defaults to 200 MB.
-            Hard limit to prevent memory exhaustion.
-        variable : str, optional
-            Variable to optimize chunking for. If None, optimizes for all variables.
-            Focusing on a specific variable can yield better optimization.
-        time_freq : str, optional
-            Time frequency hint ('daily', 'monthly', 'hourly', '6hourly').
-            Helps the algorithm make better chunking decisions.
-        inplace : bool, optional
-            DEPRECATED: In-place modification is not supported for xarray datasets.
-            This parameter is kept for API compatibility but will raise an error if True.
-            Always use False and reassign the result.
-        
-        Returns
-        -------
-        xr.Dataset or None
-            Optimally chunked dataset if successful, None if chunking unavailable.
-        
-        Raises
-        ------
-        ValueError
-            If inplace=True is requested (not supported).
-        
-        Examples
-        --------
-        >>> # Basic optimization for time series analysis
-        >>> ds_optimized = ds.climate_timeseries.optimize_chunks(target_mb=100)
-        >>> 
-        >>> # Focus on specific variable with time frequency hint
-        >>> ds_opt = ds.climate_timeseries.optimize_chunks(
-        ...     variable='temperature', time_freq='daily', target_mb=75
-        ... )
-        
-        Notes
-        -----
-        This method is a simplified interface to the sophisticated chunking
-        system. For advanced control, use optimize_chunks_advanced().
+        Issues a warning if the data for a given variable is not a Dask array,
+        as large in-memory arrays can cause performance issues.
         """
-        # Parameter validation with detailed error messages
-        if inplace:
-            raise ValueError("In-place modification is not supported for xarray Dataset chunking. "
-                           "Use inplace=False and reassign the result: ds = ds.climate_timeseries.optimize_chunks()")
-        
-        # Check if advanced chunking utilities are available
-        if not CHUNKING_AVAILABLE:
-            print("Warning: Chunking utilities not available. Skipping optimization.")
-            return None
-        
-        try:
-            # Apply sophisticated chunking strategy via the rechunk_dataset utility
-            # This leverages disk-aware chunking and memory optimization strategies
-            optimized_ds = rechunk_dataset(
-                self._obj, target_mb=target_mb, max_mb=max_mb,
-                variable=variable, time_freq=time_freq
+        data_var = self._obj[variable]
+        if not hasattr(data_var.data, 'dask'):
+            warnings.warn(
+                f"The data for variable '{variable}' is not a Dask array. For large datasets, this may lead to "
+                f"memory errors. Consider chunking your data before analysis (e.g., `ds.chunk({'time': 100})`).",
+                UserWarning
             )
-            return optimized_ds
-                
-        except Exception as e:
-            print(f"Warning: Could not optimize chunks: {e}")
-            return None
-
-    def print_chunking_info(self, detailed: bool = False):
-        """
-        Print information about current dataset chunking.
-        
-        Provides a clear overview of current chunking configuration, which is
-        essential for understanding memory usage and performance characteristics.
-        
-        Parameters
-        ----------
-        detailed : bool, optional
-            Whether to print detailed per-variable information. Defaults to False.
-            When True, shows chunking info for each variable individually.
-        """
-        if CHUNKING_AVAILABLE:
-            # Use the advanced chunking info utility if available
-            print_chunking_info(self._obj, detailed=detailed)
-        else:
-            # Fallback to basic information when chunking utilities unavailable
-            print("Chunking information utilities not available.")
-            print(f"Dataset shape: {dict(self._obj.sizes)}")
-            total_size_mb = self._obj.nbytes / (1024**2)
-            print(f"Total size: {total_size_mb:.1f} MB")
-
-    def optimize_chunks_advanced(self, operation_type: str = 'timeseries',
-                                 memory_limit_gb: Optional[float] = None,
-                                 performance_priority: str = 'balanced',
-                                 variable: Optional[str] = None,
-                                 use_disk_chunks: bool = True,
-                                 inplace: bool = False):
-        """
-        Advanced chunking optimization using sophisticated strategies.
-        
-        This method implements the advanced chunking strategy that:
-        • Inspects on-disk chunking from file encoding
-        • Calculates bytes per time step for optimal memory management
-        • Chooses time chunks based on target memory usage and parallelization
-        • Preserves spatial chunking when beneficial
-        • Adapts to different operation types and performance priorities
-        
-        Parameters
-        ----------
-        operation_type : str, optional
-            Type of operation to optimize for. Options:
-            - 'timeseries': Time series analysis (trends, decomposition)
-            - 'spatial': Spatial analysis and plotting  
-            - 'statistical': Statistical computations
-            - 'general': General purpose chunking
-            - 'io': Input/output operations
-            Default is 'timeseries'.
-        memory_limit_gb : float, optional
-            Memory limit in GB. If None, uses 25% of available system memory.
-        performance_priority : str, optional
-            Performance optimization priority. Options:
-            - 'memory': Minimize memory usage
-            - 'speed': Maximize computational speed  
-            - 'balanced': Balance memory and speed
-            Default is 'balanced'.
-        variable : str, optional
-            Variable to optimize chunking for. If None, optimizes for all variables.
-        use_disk_chunks : bool, optional
-            Whether to use disk-aware chunking strategy. Defaults to True.
-        inplace : bool, optional
-            DEPRECATED: In-place modification is not supported for xarray datasets.
-            This parameter is kept for API compatibility but will raise an error if True.
-        
-        Returns
-        -------
-        xr.Dataset or None
-            Optimally chunked dataset if inplace=False, None otherwise.
-        
-        Examples
-        --------
-        >>> # Optimize for time series analysis with memory priority
-        >>> ds_opt = ds.climate_timeseries.optimize_chunks_advanced(
-        ...     operation_type='timeseries', 
-        ...     performance_priority='memory'
-        ... )
-        
-        >>> # Optimize for spatial analysis with speed priority  
-        >>> ds = ds.climate_timeseries.optimize_chunks_advanced(
-        ...     operation_type='spatial',
-        ...     performance_priority='speed'
-        ... )
-        """
-        # Validate parameters first
-        if inplace:
-            raise ValueError("In-place modification is not supported for xarray Dataset chunking. "
-                           "Use inplace=False and reassign the result.")
-        
-        if not CHUNKING_AVAILABLE:
-            print("Warning: Advanced chunking utilities not available. Skipping optimization.")
-            return None
-        
-        try:
-            print(f"Applying advanced chunking strategy for '{operation_type}' operations...")
-            
-            if use_disk_chunks:
-                # Use sophisticated disk-aware chunking
-                chunks = calculate_optimal_chunks_from_disk(
-                    self._obj, 
-                    variable=variable
-                )
-                print("✓ Using disk-aware chunking strategy")
-            else:
-                # Use dynamic chunking calculator
-                chunks = dynamic_chunk_calculator(
-                    self._obj,
-                    operation_type=operation_type,
-                    memory_limit_gb=memory_limit_gb,
-                    performance_priority=performance_priority
-                )
-                print("✓ Using dynamic chunking strategy")
-            
-            # Apply chunking
-            optimized_ds = self._obj.chunk(chunks)
-            print(f"✓ Applied chunking strategy: {chunks}")
-            
-            # Calculate and display memory information
-            total_memory_mb = optimized_ds.nbytes / (1024**2)
-            chunk_memory_estimate = 0
-            for var_name, var in optimized_ds.data_vars.items():
-                if hasattr(var.data, 'chunksize'):
-                    chunk_memory_estimate = max(chunk_memory_estimate, var.data.chunksize / (1024**2))
-            
-            print(f"✓ Dataset size: {total_memory_mb:.1f} MB")
-            if chunk_memory_estimate > 0:
-                print(f"✓ Estimated chunk size: ~{chunk_memory_estimate:.1f} MB")
-            
-            if inplace:
-                # Cannot truly modify in place due to xarray's immutable structure
-                # This would require reassigning the entire dataset object which 
-                # is not possible from within an accessor method
-                raise ValueError("In-place modification is not supported for xarray Dataset chunking. "
-                               "Use inplace=False and reassign the result: ds = ds.climate_timeseries.optimize_chunks_advanced()")
-            else:
-                return optimized_ds
-                
-        except Exception as e:
-            print(f"Warning: Could not apply advanced chunking: {e}")
-            return None if not inplace else None
-
-    def analyze_chunking_strategy(self, variable: Optional[str] = None):
-        """
-        Analyze and suggest optimal chunking strategies for different use cases.
-        
-        This method inspects the dataset and provides recommendations for
-        different types of climate analysis operations.
-        
-        Parameters
-        ----------
-        variable : str, optional
-            Variable to analyze. If None, analyzes all variables.
-        
-        Examples
-        --------
-        >>> ds.climate_timeseries.analyze_chunking_strategy()
-        """
-        if not CHUNKING_AVAILABLE:
-            print("Chunking analysis utilities not available.")
-            return
-        
-        try:
-            print("Climate Data Chunking Analysis")
-            print("=" * 50)
-            
-            # Inspect disk chunking
-            disk_info = inspect_disk_chunking(self._obj, variable)
-            
-            # Suggest strategies for different use cases
-            use_cases = ['time_series', 'spatial_analysis', 'trend_analysis', 'memory_limited']
-            
-            print("\nRecommended chunking strategies:")
-            for use_case in use_cases:
-                strategy = suggest_chunking_strategy(self._obj, use_case)
-                print(f"\n{use_case.replace('_', ' ').title()}:")
-                print(f"  Target: {strategy['strategy']['target_mb']:.0f} MB chunks")
-                print(f"  Max: {strategy['strategy']['max_mb']:.0f} MB chunks") 
-                print(f"  Chunks: {strategy['chunks']}")
-                print(f"  Use: {strategy['strategy']['description']}")
-            
-        except Exception as e:
-            print(f"Warning: Could not analyze chunking strategy: {e}")
-
-    def optimize_for_decomposition(self, variable: Optional[str] = None):
-        """
-        Optimize chunking specifically for STL time series decomposition.
-        
-        STL decomposition benefits from larger time chunks and smaller spatial chunks
-        to minimize memory usage while maintaining good performance.
-        
-        Parameters
-        ---------- 
-        variable : str, optional
-            Variable to optimize for. If None, optimizes for all variables.
-        
-        Returns
-        -------
-        xr.Dataset or None
-            Optimally chunked dataset for STL decomposition.
-        """
-        return self.optimize_chunks_advanced(
-            operation_type='timeseries',
-            performance_priority='memory',
-            variable=variable,
-            inplace=False
-        )
 
     # ==============================================================================
     # PUBLIC PLOTTING METHODS
@@ -335,8 +51,7 @@ class TimeSeriesAccessor:
     # --------------------------------------------------------------------------
     def plot_time_series(self, variable='air', latitude=None, longitude=None, level=None,
                          time_range=None, season='annual', year=None,
-                         area_weighted=True, figsize=(16, 10), save_plot_path=None,
-                         optimize_chunks=True, chunk_target_mb=50, title=None):
+                         area_weighted=True, figsize=(16, 10), save_plot_path=None, title=None):
         """
         Plot a time series of a spatially averaged variable.
 
@@ -365,10 +80,6 @@ class TimeSeriesAccessor:
             Figure size. Defaults to (16, 10).
         save_plot_path : str or None, optional
             If provided, the path to save the plot figure.
-        optimize_chunks : bool, optional
-            Whether to automatically optimize chunking for performance. Defaults to True.
-        chunk_target_mb : float, optional
-            Target chunk size in MB for optimization. Defaults to 50 MB.
         title : str, optional
             The title for the plot. If not provided, a descriptive title will be
             generated automatically.
@@ -386,28 +97,9 @@ class TimeSeriesAccessor:
         if not isinstance(figsize, (tuple, list)) or len(figsize) != 2:
             raise ValueError("figsize must be a tuple or list of two numbers")
         
-        # Optimize chunking if requested and available
-        if optimize_chunks and CHUNKING_AVAILABLE:
-            try:
-                # Use advanced chunking strategy optimized for time series plotting
-                dataset = self.optimize_chunks_advanced(
-                    operation_type='timeseries',
-                    performance_priority='balanced',
-                    variable=variable,
-                    inplace=False
-                )
-                if dataset is not None:
-                    print(f"✓ Dataset optimized for time series plotting using advanced chunking strategy")
-                else:
-                    # Fallback to legacy chunking
-                    dataset = rechunk_dataset(self._obj, target_mb=chunk_target_mb, 
-                                            variable=variable, time_freq='daily')
-                    print(f"Dataset rechunked for optimal performance (target: {chunk_target_mb} MB per chunk)")
-            except Exception as e:
-                print(f"Warning: Could not optimize chunks: {e}. Using original dataset.")
-                dataset = self._obj
-        else:
-            dataset = self._obj
+        # Check if data is chunked and warn if not
+        self._warn_if_not_chunked(variable)
+        dataset = self._obj
         
         get_or_create_dask_client()
         # --- Step 1: Select and process the data ---
@@ -418,33 +110,23 @@ class TimeSeriesAccessor:
         if not time_name or time_name not in data_selected.dims:
             raise ValueError("Time dimension not found for time series plot.")
         if data_selected.size == 0:
-            print("Warning: No data to plot after selections.")
+            warnings.warn("No data to plot after selections.", UserWarning)
             return None
 
         # --- Step 2: Calculate the spatial mean time series ---
         ts_data = get_spatial_mean(data_selected, area_weighted)
 
-        # --- Step 3: Ensure data is in memory for plotting ---
-        if hasattr(ts_data, 'chunks') and ts_data.chunks:
-            print("Computing time series...")
-            with ProgressBar(): 
-                ts_data = ts_data.compute()
-        
-        if ts_data.size == 0:
-            print("Warning: Time series is empty after spatial averaging.")
-            return None
-
-        # Check for all NaN values
-        if hasattr(ts_data, 'values') and np.isnan(ts_data.values).all():
-            print("Warning: Time series contains only NaN values.")
-            return None
-
-        # --- Step 4: Create the plot ---
+        # --- Step 3: Create the plot (xarray handles Dask arrays efficiently) ---
         plt.figure(figsize=figsize)
-        ts_data.plot(marker='.')
+        if hasattr(ts_data, 'chunks') and ts_data.chunks:
+            warnings.warn("Plotting time series (Dask will compute as needed)...", UserWarning)
+            with ProgressBar():
+                ts_data.plot(marker='.')
+        else:
+            ts_data.plot(marker='.')
         ax = plt.gca()
 
-        # --- Step 5: Customize plot labels and title ---
+        # --- Step 4: Customize plot labels and title ---
         units = data_selected.attrs.get("units", "")
         long_name = data_selected.attrs.get("long_name", variable.replace('_', ' ').capitalize())
         ax.set_ylabel(f"{long_name} ({units})")
@@ -454,16 +136,16 @@ class TimeSeriesAccessor:
             season_display = season.upper() if season.lower() != 'annual' else 'Annual'
             year_display = f" for {year}" if year is not None else ""
             weight_display = "Area-Weighted " if area_weighted and get_coord_name(data_selected, ['lat', 'latitude']) in data_selected.dims else ""
-            ax.set_title(f"{season_display}{year_display}: {weight_display}Spatial Mean Time Series of {long_name} ({units})")
+            ax.set_title(f"{season_display}{year_display}: {weight_display}Spatial Mean Time Series of {long_name}")
         else:
             ax.set_title(title)
 
-        # --- Step 6: Finalize and save the plot ---
+        # --- Step 5: Finalize and save the plot ---
         ax.grid(True, linestyle='--', alpha=0.7)
         plt.tight_layout()
         if save_plot_path:
             plt.savefig(save_plot_path, bbox_inches='tight', dpi=300)
-            print(f"Plot saved to: {save_plot_path}")
+            warnings.warn(f"Time series plot saved to: {save_plot_path}", UserWarning)
         return ax
 
     def plot_std_space(self, variable='air', latitude=None, longitude=None, level=None,
@@ -514,6 +196,9 @@ class TimeSeriesAccessor:
         if not isinstance(figsize, (tuple, list)) or len(figsize) != 2:
             raise ValueError("figsize must be a tuple or list of two numbers")
         
+        # Check if data is chunked and warn if not
+        self._warn_if_not_chunked(variable)
+        
         get_or_create_dask_client()
         # --- Step 1: Select and process the data ---
         data_selected = select_process_data(
@@ -523,7 +208,7 @@ class TimeSeriesAccessor:
         if not time_name or time_name not in data_selected.dims:
             raise ValueError("Time dimension not found for spatial standard deviation plot.")
         if data_selected.size == 0:
-            print("Warning: No data to plot after selections.")
+            warnings.warn("No data to plot after selections.", UserWarning)
             return None
 
         # --- Step 2: Calculate the time series of spatial standard deviation ---
@@ -539,34 +224,24 @@ class TimeSeriesAccessor:
             weights = np.cos(np.deg2rad(data_selected[lat_name]))
             weights.name = "weights"
             std_ts_data = data_selected.weighted(weights).std(dim=spatial_dims, skipna=True)
-            print("Calculating area-weighted spatial standard deviation time series.")
+            warnings.warn("Calculating area-weighted spatial standard deviation time series.", UserWarning)
         else:
             # Unweighted standard deviation
             std_ts_data = data_selected.std(dim=spatial_dims, skipna=True)
             weight_msg = "(unweighted)" if lat_name in spatial_dims else ""
-            print(f"Calculating simple spatial standard deviation {weight_msg} time series.")
+            warnings.warn(f"Calculating simple spatial standard deviation {weight_msg} time series.", UserWarning)
 
-        # --- Step 3: Ensure data is in memory for plotting ---
-        if hasattr(std_ts_data, 'chunks') and std_ts_data.chunks:
-            print("Computing spatial standard deviation time series...")
-            with ProgressBar(): 
-                std_ts_data = std_ts_data.compute()
-        
-        if std_ts_data.size == 0:
-            print("Warning: Spatial standard deviation time series is empty.")
-            return None
-
-        # Check for all NaN values
-        if hasattr(std_ts_data, 'values') and np.isnan(std_ts_data.values).all():
-            print("Warning: Spatial standard deviation time series contains only NaN values.")
-            return None
-
-        # --- Step 4: Create the plot ---
+        # --- Step 3: Create the plot (xarray handles Dask arrays efficiently) ---
         plt.figure(figsize=figsize)
-        std_ts_data.plot(marker='.')
+        if hasattr(std_ts_data, 'chunks') and std_ts_data.chunks:
+            warnings.warn("Plotting spatial standard deviation time series (Dask will compute as needed)...", UserWarning)
+            with ProgressBar():
+                std_ts_data.plot(marker='.')
+        else:
+            std_ts_data.plot(marker='.')
         ax = plt.gca()
 
-        # --- Step 5: Customize plot labels and title ---
+        # --- Step 4: Customize plot labels and title ---
         units = data_selected.attrs.get("units", "")
         long_name = data_selected.attrs.get("long_name", variable.replace('_', ' ').capitalize())
         ax.set_ylabel(f"Spatial Std. Dev. ({units})" if units else "Spatial Std. Dev.")
@@ -579,12 +254,12 @@ class TimeSeriesAccessor:
             title = f"{season_display}{year_display}: Time Series of {weight_display}Spatial Std Dev of {long_name} ({units})"
         ax.set_title(title)
 
-        # --- Step 6: Finalize and save the plot ---
+        # --- Step 5: Finalize and save the plot ---
         ax.grid(True, linestyle='--', alpha=0.7)
         plt.tight_layout()
         if save_plot_path:
             plt.savefig(save_plot_path, bbox_inches='tight', dpi=300)
-            print(f"Plot saved to: {save_plot_path}")
+            warnings.warn(f"Spatial std dev plot saved to: {save_plot_path}", UserWarning)
         return ax
 
     # --------------------------------------------------------------------------
@@ -593,8 +268,7 @@ class TimeSeriesAccessor:
     def decompose_time_series(self, variable='air', level=None, latitude=None, longitude=None,
                               time_range=None, season='annual', year=None,
                               stl_seasonal=13, stl_period=12, area_weighted=True,
-                              plot_results=True, figsize=(16, 10), save_plot_path=None,
-                              optimize_chunks=True, chunk_target_mb=75, title=None):
+                              plot_results=True, figsize=(16, 10), save_plot_path=None, title=None):
         """
         Decompose a time series into trend, seasonal, and residual components using STL.
 
@@ -630,10 +304,6 @@ class TimeSeriesAccessor:
             Figure size for the plot. Defaults to (16, 10).
         save_plot_path : str or None, optional
             Path to save the decomposition plot.
-        optimize_chunks : bool, optional
-            Whether to automatically optimize chunking for STL performance. Defaults to True.
-        chunk_target_mb : float, optional
-            Target chunk size in MB for optimization. Defaults to 75 MB.
         title : str, optional
             The title for the plot. If not provided, a descriptive title will be
             generated automatically.
@@ -658,23 +328,14 @@ class TimeSeriesAccessor:
         if not isinstance(figsize, (tuple, list)) or len(figsize) != 2:
             raise ValueError("figsize must be a tuple or list of two numbers")
         
-        # Optimize chunking for STL decomposition if requested
-        if optimize_chunks and CHUNKING_AVAILABLE:
-            try:
-                # Use advanced chunking strategy optimized for time series decomposition
-                dataset = self.optimize_for_decomposition(variable=variable, inplace=False)
-                if dataset is not None:
-                    print(f"✓ Dataset optimized for STL decomposition using advanced chunking strategy")
-                else:
-                    # Fallback to legacy chunking
-                    dataset = rechunk_dataset(self._obj, target_mb=chunk_target_mb, 
-                                            variable=variable, time_freq='monthly')
-                    print(f"Dataset rechunked for STL decomposition (target: {chunk_target_mb} MB per chunk)")
-            except Exception as e:
-                print(f"Warning: Could not optimize chunks: {e}. Using original dataset.")
-                dataset = self._obj
-        else:
-            dataset = self._obj
+        # Check for statsmodels availability
+        if not STATSMODELS_AVAILABLE:
+            raise ImportError("The 'statsmodels' library is required for time series decomposition. "
+                              "Please install it, e.g., 'pip install statsmodels'.")
+        
+        # Check if data is chunked and warn if not
+        self._warn_if_not_chunked(variable)
+        dataset = self._obj
         
         get_or_create_dask_client()
         # --- Step 1: Select and process data for the time series ---
@@ -685,17 +346,17 @@ class TimeSeriesAccessor:
         if not time_name or time_name not in data_selected.dims:
             raise ValueError("Time dimension required for decomposition.")
         if data_selected.size == 0: 
-            print("Warning: No data after selections.")
+            warnings.warn("No data after selections.", UserWarning)
             return (None, None) if plot_results else None
 
         # --- Step 2: Compute the spatially-averaged time series ---
         ts_spatial_mean = get_spatial_mean(data_selected, area_weighted)
         if hasattr(ts_spatial_mean, 'chunks') and ts_spatial_mean.chunks:
-            print("Computing mean time series for decomposition...")
+            warnings.warn("Computing mean time series for decomposition...", UserWarning)
             with ProgressBar(): 
                 ts_spatial_mean = ts_spatial_mean.compute()
         if ts_spatial_mean.size == 0: 
-            print("Warning: Time series empty after spatial mean.")
+            warnings.warn("Time series empty after spatial mean.", UserWarning)
             return (None, None) if plot_results else None
         
         # --- Step 3: Convert the xarray DataArray to a pandas Series for STL ---
@@ -705,28 +366,28 @@ class TimeSeriesAccessor:
 
         try:
             ts_pd = ts_spatial_mean.to_series()
-        except Exception as e_pd:
+        except (ValueError, TypeError, AttributeError) as e_pd:
             raise ValueError(f"Could not convert to pandas Series for STL: {e_pd}")
 
         # --- Step 4: Prepare the time series for STL (drop NaNs, check length) ---
         ts_pd = ts_pd.dropna()
         if ts_pd.empty:
-            print("Warning: Time series is empty or all NaN after processing for STL.")
+            warnings.warn("Time series is empty or all NaN after processing for STL.", UserWarning)
             return (None, None) if plot_results else None
         if len(ts_pd) <= 2 * stl_period: 
-            print(f"Warning: Time series length ({len(ts_pd)}) must be > 2 * stl_period ({2*stl_period}) for STL.")
+            warnings.warn(f"Time series length ({len(ts_pd)}) must be > 2 * stl_period ({2*stl_period}) for STL.", UserWarning)
             return (None, None) if plot_results else None
         
         # --- Step 5: Perform STL decomposition ---
         if stl_seasonal % 2 == 0:
             stl_seasonal += 1
-            print(f"Adjusted stl_seasonal to be odd: {stl_seasonal}")
+            warnings.warn(f"Adjusted stl_seasonal to be odd: {stl_seasonal}", UserWarning)
 
-        print(f"Performing STL decomposition (period={stl_period}, seasonal_smooth={stl_seasonal})...")
+        warnings.warn(f"Performing STL decomposition (period={stl_period}, seasonal_smooth={stl_seasonal})...", UserWarning)
         try:
             stl_result = STL(ts_pd, seasonal=stl_seasonal, period=stl_period, robust=True).fit()
-        except Exception as e:
-             print(f"Error: STL decomposition failed: {e}. Check time series properties (length, NaNs, period).")
+        except (ValueError, ImportError, RuntimeError) as e:
+             warnings.warn(f"STL decomposition failed: {e}. Check time series properties (length, NaNs, period).", UserWarning)
              return (None, None) if plot_results else None
 
         results_dict = {
@@ -738,7 +399,7 @@ class TimeSeriesAccessor:
 
         # --- Step 6: Plot the results if requested ---
         if plot_results:
-            print("Plotting decomposition results...")
+            warnings.warn("Plotting decomposition results...", UserWarning)
             fig, axes = plt.subplots(4, 1, figsize=figsize, sharex=True)
             units = data_selected.attrs.get("units", "")
             long_name = data_selected.attrs.get("long_name", variable.replace('_', ' ').capitalize())
@@ -771,9 +432,9 @@ class TimeSeriesAccessor:
             if save_plot_path:
                 try:
                     plt.savefig(save_plot_path, bbox_inches='tight', dpi=300)
-                    print(f"Plot saved to: {save_plot_path}")
-                except Exception as e:
-                    print(f"Warning: Could not save plot to {save_plot_path}: {e}")
+                    warnings.warn(f"Decomposition plot saved to: {save_plot_path}", UserWarning)
+                except (OSError, IOError, ValueError) as e:
+                    warnings.warn(f"Could not save plot to {save_plot_path}: {e}", UserWarning)
             return results_dict, fig
         else:
             return results_dict

@@ -53,237 +53,6 @@ class PlotsAccessor:
         self._obj = xarray_obj
 
     # --------------------------------------------------------------------------
-    # INTERNAL HELPER METHODS: DATA SELECTION & PREPARATION
-    # --------------------------------------------------------------------------
-    def _select_data(self, variable, latitude=None, longitude=None, level=None, time_range=None):
-        """
-        Select and subset data variable based on spatial, temporal, and vertical coordinates.
-
-        This is a core utility method that handles the complex logic of coordinate
-        selection across different climate datasets. It accommodates various coordinate
-        naming conventions and data structures commonly found in climate model output.
-        
-        Key features:
-        - Automatic coordinate name detection (lat/latitude, lon/longitude, etc.)
-        - Flexible selection methods (single values, slices, lists)
-        - Intelligent level handling with nearest-neighbor selection
-        - Comprehensive error handling and validation
-        - Support for both datetime and numeric time coordinates
-
-        Parameters
-        ----------
-        variable : str
-            The name of the data variable to select from the Dataset.
-            Must exist in dataset.data_vars.
-        latitude : float, slice, or list, optional
-            Latitude selection. Can be:
-            - Single value: nearest-neighbor selection
-            - Slice: range selection (e.g., slice(30, 60))
-            - List: specific values selection
-        longitude : float, slice, or list, optional
-            Longitude selection. Same formats as latitude.
-        level : float or slice, optional
-            Vertical level selection. If not specified and multiple levels exist,
-            defaults to first level. Single values use nearest-neighbor matching.
-        time_range : slice, optional
-            Time range selection as slice of datetime-like objects or strings.
-            E.g., slice('2000-01-01', '2010-12-31')
-
-        Returns
-        -------
-        selected_data : xr.DataArray
-            The selected and subsetted data variable with applied selections.
-        level_dim_name_found : str or None
-            Name of the level dimension found in the data (for reference).
-        level_op : str or None
-            Description of level operation performed:
-            - 'single_selected': Single level chosen by user
-            - 'range_selected': Level range selected
-            - 'single_selected_default': First level chosen automatically
-
-        Returns
-        -------
-        selected_data : xr.DataArray
-            The selected and subsetted data variable.
-        level_dim_name_found : str or None
-            The name of the level dimension found in the data.
-        level_op : str or None
-            A string indicating the operation performed on the level dimension
-            ('single_selected', 'range_selected', 'single_selected_default').
-
-        Raises
-        ------
-        ValueError
-            If the variable is not found or if coordinate selections are invalid.
-            
-        Notes
-        -----
-        This method implements robust coordinate validation that handles:
-        - Different coordinate naming conventions (CF-compliant and others)
-        - Datetime vs numeric coordinate systems
-        - Boundary checking with informative error messages
-        - Graceful handling of missing coordinates
-        """
-        # --- Step 1: Variable validation and initialization ---
-        # Ensure the requested variable exists in the dataset.
-        if variable not in self._obj.data_vars:
-            raise ValueError(f"Variable '{variable}' not found. Available: {list(self._obj.data_vars.keys())}")
-
-        data_var = self._obj[variable]
-        selection_dict = {}  # Stores coordinate selections for xarray's .sel() method.
-        method_dict = {}     # Stores method specifications (e.g., 'nearest' for exact matching).
-
-        # --- Step 2: Coordinate name mapping and discovery ---
-        # Build a flexible mapping from standard names (e.g., 'latitude') to the
-        # actual coordinate names present in the dataset. This handles various
-        # naming conventions across different climate datasets (CF-compliant and others).
-        coord_map = {
-            'latitude': get_coord_name(data_var, ['lat', 'latitude', 'LAT', 'LATITUDE', 'y', 'rlat', 'nav_lat']),
-            'longitude': get_coord_name(data_var, ['lon', 'longitude', 'LON', 'LONGITUDE', 'x', 'rlon', 'nav_lon']),
-            'time': get_coord_name(data_var, ['time', 't']),
-            'level': next((name for name in ['level', 'lev', 'plev', 'height', 'altitude', 'depth', 'z'] if name in data_var.dims or name in data_var.coords), None)
-        }
-        level_dim_name_found = coord_map['level']
-        level_op = None  # Track level operations for metadata
-
-        # Map user parameters to coordinate names and datetime handling flags
-        coord_params_map = {
-            'latitude': (latitude, False), 'longitude': (longitude, False),
-            'time': (time_range, True), 'level': (level, False)
-        }
-
-        # --- Step 3: Process each coordinate selection with comprehensive validation ---
-        for coord_type_name, (coord_val_param, is_param_datetime_intent) in coord_params_map.items():
-            actual_coord_name_in_data = coord_map[coord_type_name]
-            if coord_val_param is None:
-                continue  # Skip if no selection was provided for this coordinate.
-
-            if actual_coord_name_in_data is None:
-                if coord_type_name == "level":
-                    print(f"Warning: Level parameter provided, but no recognized level coordinate found. Ignoring.")
-                else:
-                    raise ValueError(f"No {coord_type_name} coordinate found, but '{coord_type_name}' parameter was provided.")
-                continue
-            if actual_coord_name_in_data not in data_var.coords:
-                print(f"Warning: Coord '{actual_coord_name_in_data}' not in variable '{variable}'. Skipping selection.")
-                continue
-            
-            # Get the min/max values from the data for validation.
-            min_data_val_raw_item = data_var[actual_coord_name_in_data].min().item()
-            max_data_val_raw_item = data_var[actual_coord_name_in_data].max().item()
-
-            # Extract min/max from the user's request.
-            req_min_val, req_max_val = None, None
-            is_scalar_request = not isinstance(coord_val_param, (slice, list, np.ndarray))
-            if isinstance(coord_val_param, slice):
-                req_min_val, req_max_val = coord_val_param.start, coord_val_param.stop
-            elif isinstance(coord_val_param, (list, np.ndarray)):
-                if not coord_val_param: raise ValueError(f"{coord_type_name.capitalize()} selection list/array empty.")
-                req_min_val, req_max_val = min(coord_val_param), max(coord_val_param)
-            else:
-                req_min_val = req_max_val = coord_val_param
-
-            # This section handles the complexity of comparing user-provided coordinate
-            # values with the data's coordinate values, especially when dealing with
-            # different datetime representations (numpy.datetime64, cftime, numeric years).
-            comp_req_min, comp_req_max = req_min_val, req_max_val
-            comp_data_min, comp_data_max = min_data_val_raw_item, max_data_val_raw_item
-
-            data_coord_dtype = data_var[actual_coord_name_in_data].dtype
-            data_coord_is_np_datetime = np.issubdtype(data_coord_dtype, np.datetime64)
-            data_coord_is_cftime = False
-            if not data_coord_is_np_datetime and data_var[actual_coord_name_in_data].size > 0:
-                first_val = data_var[actual_coord_name_in_data].isel({data_var[actual_coord_name_in_data].dims[0]: 0}).item()
-                if hasattr(first_val, 'year') and hasattr(first_val, 'month') and not isinstance(first_val, (np.datetime64, np.timedelta64)):
-                     data_coord_is_cftime = True
-
-            data_coord_is_datetime_like = data_coord_is_np_datetime or data_coord_is_cftime
-            data_coord_is_numeric = np.issubdtype(data_coord_dtype, np.number)
-
-            if is_param_datetime_intent:
-                try:
-                    if comp_req_min is not None: comp_req_min = np.datetime64(comp_req_min)
-                    if comp_req_max is not None: comp_req_max = np.datetime64(comp_req_max)
-                except Exception as e:
-                    raise ValueError(f"Could not convert requested datetime value for {coord_type_name} ('{coord_val_param}') to np.datetime64: {e}")
-
-                if data_coord_is_np_datetime:
-                    if isinstance(min_data_val_raw_item, (int, np.integer)):
-                        unit = np.datetime_data(data_coord_dtype)[0]
-                        comp_data_min = np.datetime64(min_data_val_raw_item, unit)
-                    elif min_data_val_raw_item is not None:
-                        comp_data_min = np.datetime64(min_data_val_raw_item)
-                    
-                    if isinstance(max_data_val_raw_item, (int, np.integer)):
-                        unit = np.datetime_data(data_coord_dtype)[0]
-                        comp_data_max = np.datetime64(max_data_val_raw_item, unit)
-                    elif max_data_val_raw_item is not None:
-                        comp_data_max = np.datetime64(max_data_val_raw_item)
-
-                elif data_coord_is_cftime:
-                    try:
-                        if comp_data_min is not None: comp_data_min = np.datetime64(comp_data_min)
-                        if comp_data_max is not None: comp_data_max = np.datetime64(comp_data_max)
-                    except Exception as c_e:
-                        print(f"Warning: Could not convert cftime data bounds for {actual_coord_name_in_data} to np.datetime64 for comparison ({c_e}). Trusting xarray's .sel().")
-                        comp_data_min, comp_data_max = None, None
-
-
-                elif data_coord_is_numeric:
-                    print(f"Note: Time parameter is datetime-like, but data coord '{actual_coord_name_in_data}' is numeric. "
-                          "Extracting year from request for comparison.")
-                    try:
-                        if comp_req_min is not None: comp_req_min = comp_req_min.astype('datetime64[Y]').astype(int) + 1970
-                        if comp_req_max is not None: comp_req_max = comp_req_max.astype('datetime64[Y]').astype(int) + 1970
-                    except Exception as e_year:
-                        print(f"Warning: Could not extract year from datetime request for {actual_coord_name_in_data}: {e_year}")
-            
-            # Check that requested min/max values are within the data's actual min/max range.
-            if comp_req_min is not None and comp_data_max is not None:
-                try:
-                    if comp_req_min > comp_data_max:
-                        raise ValueError(f"Requested {coord_type_name} minimum {req_min_val} (as {comp_req_min} type {type(comp_req_min).__name__}) "
-                                         f"> data maximum {max_data_val_raw_item} (as {comp_data_max} type {type(comp_data_max).__name__})")
-                except TypeError as e:
-                    raise TypeError(f"Type mismatch comparing request min ({type(comp_req_min).__name__}) and data max ({type(comp_data_max).__name__}) for {coord_type_name}. Error: {e}")
-
-            if comp_req_max is not None and comp_data_min is not None:
-                try:
-                    if comp_req_max < comp_data_min:
-                         raise ValueError(f"Requested {coord_type_name} maximum {req_max_val} (as {comp_req_max} type {type(comp_req_max).__name__}) "
-                                         f"< data minimum {min_data_val_raw_item} (as {comp_data_min} type {type(comp_data_min).__name__})")
-                except TypeError as e:
-                    raise TypeError(f"Type mismatch comparing request max ({type(comp_req_max).__name__}) and data min ({type(comp_data_min).__name__}) for {coord_type_name}. Error: {e}")
-
-            # --- Step 4: Finalize and apply selections ---
-            selection_dict[actual_coord_name_in_data] = coord_val_param
-            if coord_type_name == "level":
-                level_op = 'range_selected'
-                if is_scalar_request or isinstance(coord_val_param, (int, float, np.number)):
-                    method_dict[actual_coord_name_in_data] = 'nearest'
-                    level_op = 'single_selected'
-
-        # If no level is specified but multiple exist, default to the first level.
-        if level is None and level_dim_name_found and level_dim_name_found in data_var.dims and data_var.sizes.get(level_dim_name_found, 0) > 1:
-            first_level_val = data_var[level_dim_name_found].isel({level_dim_name_found: 0}).item()
-            selection_dict[level_dim_name_found] = first_level_val
-            level_op = 'single_selected_default'
-            print(f"Warning: Multiple levels found. Using first level: {first_level_val}")
-
-        selected_data = data_var
-        if method_dict:
-            for coord_name, method_val in method_dict.items():
-                if coord_name in selection_dict:
-                    selected_data = selected_data.sel({coord_name: selection_dict[coord_name]}, method=method_val)
-                    del selection_dict[coord_name]
-        
-        if selection_dict:
-            selected_data = selected_data.sel(selection_dict)
-        
-        if level_op == 'single_selected_default': level_op = 'single_selected'
-        return selected_data, level_dim_name_found, level_op
-
-    # --------------------------------------------------------------------------
     # INTERNAL HELPER METHODS: PLOT LAYOUT & FINALIZATION
     # --------------------------------------------------------------------------
     def _setup_geographical_ax(self, figsize, land_only, projection='PlateCarree'):
@@ -367,7 +136,7 @@ class PlotsAccessor:
                 if level_dim_name_in_orig_var in original_var_accessor.coords:
                      level_units = original_var_accessor.coords[level_dim_name_in_orig_var].attrs.get('units', '')
                 level_info_parts.append(f"Level: {level_val} {level_units}".strip())
-            except Exception:
+            except (KeyError, AttributeError, TypeError):
                 level_info_parts.append(f"Level: {processed_data_coords.get(level_dim_name_in_orig_var, 'N/A')}")
         elif level_op == 'range_selected':
             level_info_parts.append("(Level Mean)")
@@ -397,8 +166,8 @@ class PlotsAccessor:
                         time_info_parts.append(f"Time: {start_str}")
                     else:
                         time_info_parts.append(f"{start_str} to {end_str}")
-                except Exception as e:
-                    print(f"Note: Could not format datetime time range for title: {e}")
+                except (ValueError, TypeError, AttributeError) as e:
+                    warnings.warn(f"Could not format datetime time range for title: {e}", UserWarning)
         elif isinstance(time_range_requested, slice) and \
              time_range_requested.start is not None and time_range_requested.stop is not None:
             if isinstance(time_range_requested.start, (int, float)) and isinstance(time_range_requested.stop, (int, float)):
@@ -409,7 +178,7 @@ class PlotsAccessor:
                     start_str = np.datetime64(time_range_requested.start, unit).astype(str)
                     stop_str = np.datetime64(time_range_requested.stop, unit).astype(str)
                     time_info_parts.append(f"Requested: {start_str} to {stop_str}")
-                except Exception:
+                except (ValueError, TypeError, AttributeError):
                     time_info_parts.append(f"Requested: {time_range_requested.start} to {time_range_requested.stop}")
 
         # --- Part 4: Assemble Final Title ---
@@ -466,12 +235,12 @@ class PlotsAccessor:
                 max_lat = data_for_extent[lat_name_plot].max().item()
                 if min_lon != max_lon and min_lat != max_lat :
                      ax.set_extent([min_lon, max_lon, min_lat, max_lat], crs=ccrs.PlateCarree())
-            except Exception as e:
-                print(f"Warning: Could not set extent for '{variable}': {e}")
+            except (ValueError, TypeError, AttributeError) as e:
+                warnings.warn(f"Could not set extent for '{variable}': {e}", UserWarning)
         
         # Save the plot to a file if a path is provided.
         if save_plot_path:
-            plt.savefig(save_plot_path, bbox_inches='tight', dpi=300); print(f"Plot saved to: {save_plot_path}")
+            plt.savefig(save_plot_path, bbox_inches='tight', dpi=300); warnings.warn(f"Plot saved to: {save_plot_path}", UserWarning)
         return ax
 
     def _plot_spatial_data(self,
@@ -645,19 +414,15 @@ class PlotsAccessor:
         -------
         xr.DataArray
             A DataArray containing the mean of the yearly operation results.
+            Returns a Dask-backed DataArray (no premature computation).
         """
         if op_kwargs is None: op_kwargs = {}
         year_coord_da = data_for_yearly_op[time_coord_name].dt.year
         grouped_data = data_for_yearly_op.groupby(year_coord_da.rename("year_for_grouping"))
-
-        if data_for_yearly_op.chunks:
-            print(f"Computing yearly {dask_op_name or operation} for Dask...")
-            with ProgressBar(): yearly_data = getattr(grouped_data, operation)(dim=time_coord_name, skipna=True, **op_kwargs).compute()
-            print(f"Computing mean of yearly {dask_op_name or operation} for Dask...")
-            with ProgressBar(): mean_yearly_data = yearly_data.mean(dim='year_for_grouping', skipna=True).compute()
-        else:
-            yearly_data = getattr(grouped_data, operation)(dim=time_coord_name, skipna=True, **op_kwargs)
-            mean_yearly_data = yearly_data.mean(dim='year_for_grouping', skipna=True)
+        
+        yearly_data = getattr(grouped_data, operation)(dim=time_coord_name, skipna=True, **op_kwargs)
+        mean_yearly_data = yearly_data.mean(dim='year_for_grouping', skipna=True)
+        
         return mean_yearly_data
 
     def _calc_spell_counts(self, data_in, time_coord_name, threshold_val, min_consecutive_days, spell_type_is_above_thresh):
@@ -756,7 +521,7 @@ class PlotsAccessor:
     # A. Basic Statistical Plots
     # --------------------------------------------------------------------------
     def plot_mean(self, variable='air', latitude=None, longitude=None, level=None,
-                  time_range=None, season='annual', contour=False,
+                  time_range=None, season='annual', year=None, contour=False,
                   figsize=(16, 10), cmap='coolwarm', land_only=False,
                   levels=30, save_plot_path=None, title=None, projection='PlateCarree'):
         """
@@ -812,8 +577,8 @@ class PlotsAccessor:
 
         See Also
         --------
-        plot_std_time : Plot the temporal standard deviation.
-        plot_percentile_spatial : Plot a specific temporal percentile.
+        plot_std : Plot the temporal standard deviation.
+        plot_percentile : Plot a specific temporal percentile.
 
         Examples
         --------
@@ -829,49 +594,47 @@ class PlotsAccessor:
         """
         get_or_create_dask_client()
         # Step 1: Select the data based on user parameters
-        selected_data, level_dim_name, level_op = self._select_data(
-            variable, latitude, longitude, level, time_range
+        from ..utils import select_process_data
+        selected_data = select_process_data(
+            self._obj, variable, latitude, longitude, level, time_range, season, year
         )
-        
+        level_dim_name = get_coord_name(selected_data, ['level', 'lev', 'plev'])
+        level_op = None
+        if level is not None and isinstance(level, slice):
+            level_op = 'range_selected'
+        elif level is not None:
+            level_op = 'single_selected'
         # Step 2: If a level range was selected, average over it first
         current_data_for_ops = selected_data
         if level_op == 'range_selected' and level_dim_name and level_dim_name in current_data_for_ops.dims:
-             current_data_for_ops = current_data_for_ops.mean(dim=level_dim_name, skipna=True)
-             print(f"Averaging over selected levels for '{variable}'.")
-
-        # Step 3: Apply seasonal filter
-        data_season = filter_by_season(current_data_for_ops, season)
-        if data_season.size == 0:
-            raise ValueError(f"No data after selections and season filter ('{season}') for '{variable}'.")
-
-        # Step 4: Calculate the temporal mean
-        time_coord_name_actual = get_coord_name(data_season, ['time', 't'])
-        
-        mean_data = data_season
-        if time_coord_name_actual and time_coord_name_actual in data_season.dims:
-            if data_season.chunks:
-                print(f"Computing time mean for '{variable}' using Dask...")
-                with ProgressBar(): mean_data = data_season.mean(dim=time_coord_name_actual, skipna=True).compute()
+            current_data_for_ops = current_data_for_ops.mean(dim=level_dim_name, skipna=True)
+            warnings.warn(f"Averaging over selected levels for '{variable}'.", UserWarning)
+        # Step 3: Calculate the temporal mean
+        time_coord_name_actual = get_coord_name(current_data_for_ops, ['time', 't'])
+        mean_data = current_data_for_ops
+        if time_coord_name_actual and time_coord_name_actual in current_data_for_ops.dims:
+            if hasattr(current_data_for_ops, 'chunks') and current_data_for_ops.chunks:
+                warnings.warn(f"Computing time mean for '{variable}' using Dask...", UserWarning)
+                with ProgressBar(): mean_data = current_data_for_ops.mean(dim=time_coord_name_actual, skipna=True)
             else:
-                 mean_data = data_season.mean(dim=time_coord_name_actual, skipna=True)
+                mean_data = current_data_for_ops.mean(dim=time_coord_name_actual, skipna=True)
         elif time_coord_name_actual:
-            print(f"Warning: Time coord '{time_coord_name_actual}' not a dimension for averaging. Plotting as is.")
+            warnings.warn(f"Time coord '{time_coord_name_actual}' not a dimension for averaging. Plotting as is.", UserWarning)
         else:
-            print(f"Warning: No time coord for averaging. Plotting as is.")
-
-        # Step 5: Pass to the generic spatial plotting function
+            warnings.warn(f"No time coord for averaging. Plotting as is.", UserWarning)
+        # Step 4: Pass to the generic spatial plotting function
         return self._plot_spatial_data(
             mean_data, variable, selected_data.attrs, self._obj[variable],
-            data_season, time_coord_name_actual, time_range,
+            current_data_for_ops, time_coord_name_actual, time_range,
             level_op, level_dim_name, season, contour,
             figsize, cmap, land_only, levels, save_plot_path,
             plot_operation_name="Average", title=title, projection=projection
         )
 
-    def plot_std_time(self, variable='air', latitude=None, longitude=None, level=None,
-                      time_range=None, season='annual', contour=False,
-                      figsize=(16,10), cmap='viridis', land_only = False,
-                      levels=30, save_plot_path = None, title=None, projection='PlateCarree'):
+    def plot_std(self, variable='air', latitude=None, longitude=None, level=None,
+                 time_range=None, season='annual', year=None, contour=False,
+                 figsize=(16,10), cmap='viridis', land_only = False,
+                 levels=30, save_plot_path = None, title=None, projection='PlateCarree'):
         """
         Plot the temporal standard deviation of a variable.
 
@@ -927,17 +690,21 @@ class PlotsAccessor:
         """
         get_or_create_dask_client()
         # Step 1: Select the data based on user parameters
-        selected_data, level_dim_name, level_op = self._select_data(
-            variable, latitude, longitude, level, time_range
+        from ..utils import select_process_data
+        selected_data = select_process_data(
+            self._obj, variable, latitude, longitude, level, time_range, season, year
         )
-        
+        level_dim_name = get_coord_name(selected_data, ['level', 'lev', 'plev'])
+        level_op = None
+        if level is not None and isinstance(level, slice):
+            level_op = 'range_selected'
+        elif level is not None:
+            level_op = 'single_selected'
         # Step 2: If a level range was selected, average over it first
         current_data_for_ops = selected_data
-        
         if level_op == 'range_selected' and level_dim_name and level_dim_name in current_data_for_ops.dims:
             current_data_for_ops = current_data_for_ops.mean(dim=level_dim_name, skipna=True)
-            print(f"Averaging across selected levels for '{variable}' before calculating std dev.")
-
+            warnings.warn(f"Averaging across selected levels for '{variable}' before calculating std dev.", UserWarning)
         # Step 3: Apply seasonal filter
         time_coord_name_actual = get_coord_name(current_data_for_ops, ['time', 't'])
         if not time_coord_name_actual or time_coord_name_actual not in current_data_for_ops.dims:
@@ -947,11 +714,11 @@ class PlotsAccessor:
         if data_season.size == 0:
             raise ValueError(f"No data after selections and season filter ('{season}') for '{variable}'.")
         if data_season.sizes[time_coord_name_actual] < 2:
-             raise ValueError(f"Std dev requires at least 2 time points (found {data_season.sizes[time_coord_name_actual]}).")
+            raise ValueError(f"Std dev requires at least 2 time points (found {data_season.sizes[time_coord_name_actual]}).")
 
         # Step 4: Calculate the temporal standard deviation
         if data_season.chunks:
-            print(f"Computing std dev over time for '{variable}' using Dask...")
+            warnings.warn(f"Computing std dev over time for '{variable}' using Dask...", UserWarning)
             with ProgressBar(): std_data = data_season.std(dim=time_coord_name_actual, skipna=True).compute()
         else:
             std_data = data_season.std(dim=time_coord_name_actual, skipna=True)
@@ -966,11 +733,11 @@ class PlotsAccessor:
             projection=projection
         )
 
-    def plot_percentile_spatial(self, variable='prate', percentile=95, latitude=None, longitude=None,
-                                level=None, time_range=None, contour=False, figsize=(16, 10),
-                                cmap='Blues',
-                                land_only=False, levels=30, save_plot_path=None, title=None,
-                                projection='PlateCarree'):
+    def plot_percentile(self, variable='prate', percentile=95, latitude=None, longitude=None,
+                        level=None, time_range=None, season='annual', year=None, contour=False, figsize=(16, 10),
+                        cmap='Blues',
+                        land_only=False, levels=30, save_plot_path=None, title=None,
+                        projection='PlateCarree'):
         """
         Plot the spatial distribution of a temporal percentile for a variable.
 
@@ -1027,15 +794,21 @@ class PlotsAccessor:
             raise ValueError(f"Percentile must be 0-100, got {percentile}")
             
         # Step 2: Select the data and handle level-based averaging
-        selected_data, level_dim_name, level_op = self._select_data(
-            variable, latitude, longitude, level, time_range
+        from ..utils import select_process_data
+        selected_data = select_process_data(
+            self._obj, variable, latitude, longitude, level, time_range, season, year
         )
-        
+        level_dim_name = get_coord_name(selected_data, ['level', 'lev', 'plev'])
+        level_op = None
+        if level is not None and isinstance(level, slice):
+            level_op = 'range_selected'
+        elif level is not None:
+            level_op = 'single_selected'
         current_data_for_ops = selected_data
         
         if level_op == 'range_selected' and level_dim_name and level_dim_name in current_data_for_ops.dims:
             current_data_for_ops = current_data_for_ops.mean(dim=level_dim_name, skipna=True)
-            print(f"Averaging across selected levels for '{variable}' before calculating percentile.")
+            warnings.warn(f"Averaging across selected levels for '{variable}' before calculating percentile.", UserWarning)
 
         # Step 3: Calculate the percentile
         time_coord_name_actual = get_coord_name(current_data_for_ops, ['time', 't'])
@@ -1043,7 +816,7 @@ class PlotsAccessor:
             raise ValueError(f"Percentile calculation requires a time dimension for '{variable}'.")
 
         if current_data_for_ops.chunks:
-            print(f"Computing {percentile}th percentile for '{variable}' using Dask...")
+            warnings.warn(f"Computing {percentile}th percentile for '{variable}' using Dask...", UserWarning)
             with ProgressBar():
                 percentile_data = current_data_for_ops.quantile(percentile / 100.0, dim=time_coord_name_actual, skipna=True).compute()
         else:
@@ -1063,13 +836,13 @@ class PlotsAccessor:
     # --------------------------------------------------------------------------
     # B. Precipitation and Climate Indices (ETCCDI-style)
     # --------------------------------------------------------------------------
-    def plot_annual_sum_mean(self, variable='prate', latitude=None, longitude=None, level=None,
-                             time_range=None, contour=False, figsize=(16, 10),
-                             cmap='Blues',
-                             land_only=False, levels=30, save_plot_path=None,
-                             projection='PlateCarree'):
+    def plot_prcptot(self, variable='prate', latitude=None, longitude=None, level=None,
+                     time_range=None, season='annual', year=None, contour=False, figsize=(16, 10),
+                     cmap='Blues',
+                     land_only=False, levels=30, save_plot_path=None, title=None,
+                     projection='PlateCarree'):
         """
-        Plot the mean of the annual total precipitation (PRCPTOT index).
+        Plot the Annual Total Precipitation (PRCPTOT index).
 
         This function calculates the total precipitation for each year and then
         computes the mean of these annual totals. It is useful for visualizing
@@ -1110,26 +883,26 @@ class PlotsAccessor:
 
         See Also
         --------
-        plot_max_1day_precip_mean : Plot the mean annual maximum 1-day precipitation.
+        plot_rx1day : Plot the annual maximum 1-day precipitation.
         """
         get_or_create_dask_client()
         # Step 1: Select the data based on user parameters
-        selected_data, level_dim_name, level_op = self._select_data(
-            variable, latitude, longitude, level, time_range
+        from ..utils import select_process_data
+        selected_data = select_process_data(
+            self._obj, variable, latitude, longitude, level, time_range, season, year
         )
-        
-        current_data_for_ops = selected_data
-        
-        if level_op == 'range_selected' and level_dim_name and level_dim_name in current_data_for_ops.dims:
-            current_data_for_ops = current_data_for_ops.mean(dim=level_dim_name, skipna=True)
-            print(f"Averaging mean annual sum across selected levels for '{variable}'.")
-
+        level_dim_name = get_coord_name(selected_data, ['level', 'lev', 'plev'])
+        level_op = None
+        if level is not None and isinstance(level, slice):
+            level_op = 'range_selected'
+        elif level is not None:
+            level_op = 'single_selected'
         # Step 2: Calculate the mean of annual sums
-        time_coord_name = get_coord_name(current_data_for_ops, ['time', 't'])
-        if not time_coord_name or time_coord_name not in current_data_for_ops.dims:
+        time_coord_name = get_coord_name(selected_data, ['time', 't'])
+        if not time_coord_name or time_coord_name not in selected_data.dims:
             raise ValueError(f"Annual sum mean requires time dimension for '{variable}'.")
         
-        mean_annual_sum = self._apply_yearly_op_then_mean(current_data_for_ops, time_coord_name, 'sum', dask_op_name="sums")
+        mean_annual_sum = self._apply_yearly_op_then_mean(selected_data, time_coord_name, 'sum', dask_op_name="sums")
 
         # Step 3: Pass to the generic spatial plotting function
         return self._plot_spatial_data(
@@ -1142,13 +915,13 @@ class PlotsAccessor:
             projection=projection
         )
 
-    def plot_max_1day_precip_mean(self, variable='prate', latitude=None, longitude=None, level=None,
-                                  time_range=None, contour=False, figsize=(16, 10),
-                                  cmap='viridis',
-                                  land_only=False, levels=30, save_plot_path=None,
-                                  projection='PlateCarree'):
+    def plot_rx1day(self, variable='prate', latitude=None, longitude=None, level=None,
+                    time_range=None, season='annual', year=None, contour=False, figsize=(16, 10),
+                    cmap='viridis',
+                    land_only=False, levels=30, save_plot_path=None, title=None,
+                    projection='PlateCarree'):
         """
-        Plot the mean of the annual maximum 1-day precipitation (Rx1day index).
+        Plot the Annual Maximum 1-day Precipitation (Rx1day index).
 
         This function finds the highest precipitation amount in a single day for
         each year, averages these maxima, and plots the result. It is useful for
@@ -1189,26 +962,26 @@ class PlotsAccessor:
 
         See Also
         --------
-        plot_annual_sum_mean : Plot the mean annual total precipitation.
+        plot_prcptot : Plot the annual total precipitation.
         """
         get_or_create_dask_client()
         # Step 1: Select the data based on user parameters
-        selected_data, level_dim_name, level_op = self._select_data(
-            variable, latitude, longitude, level, time_range
+        from ..utils import select_process_data
+        selected_data = select_process_data(
+            self._obj, variable, latitude, longitude, level, time_range, season, year
         )
-        
-        current_data_for_ops = selected_data
-        
-        if level_op == 'range_selected' and level_dim_name and level_dim_name in current_data_for_ops.dims:
-            current_data_for_ops = current_data_for_ops.mean(dim=level_dim_name, skipna=True)
-            print(f"Averaging Rx1day across selected levels for '{variable}'.")
-
+        level_dim_name = get_coord_name(selected_data, ['level', 'lev', 'plev'])
+        level_op = None
+        if level is not None and isinstance(level, slice):
+            level_op = 'range_selected'
+        elif level is not None:
+            level_op = 'single_selected'
         # Step 2: Calculate the mean of annual maxima
-        time_coord_name = get_coord_name(current_data_for_ops, ['time', 't'])
-        if not time_coord_name or time_coord_name not in current_data_for_ops.dims:
+        time_coord_name = get_coord_name(selected_data, ['time', 't'])
+        if not time_coord_name or time_coord_name not in selected_data.dims:
             raise ValueError(f"Rx1day requires time dimension for '{variable}'.")
 
-        mean_rx1day = self._apply_yearly_op_then_mean(current_data_for_ops, time_coord_name, 'max', dask_op_name="maxima")
+        mean_rx1day = self._apply_yearly_op_then_mean(selected_data, time_coord_name, 'max', dask_op_name="maxima")
 
         # Step 3: Pass to the generic spatial plotting function
         return self._plot_spatial_data(
@@ -1221,13 +994,13 @@ class PlotsAccessor:
             projection=projection
         )
 
-    def plot_simple_daily_intensity_mean(self, variable='prate', latitude=None, longitude=None, level=None,
-                                         time_range=None, contour=False, figsize=(16, 10),
-                                         cmap='YlGnBu',
-                                         land_only=False, levels=30, save_plot_path=None,
-                                         projection='PlateCarree'):
+    def plot_sdii(self, variable='prate', latitude=None, longitude=None, level=None,
+                  time_range=None, season='annual', year=None, contour=False, figsize=(16, 10),
+                  cmap='YlGnBu',
+                  land_only=False, levels=30, save_plot_path=None, title=None,
+                  projection='PlateCarree'):
         """
-        Plot the mean Simple Daily Intensity Index (SDII).
+        Plot the Simple Daily Intensity Index (SDII).
 
         SDII is the total annual precipitation divided by the number of wet days
         (days with precipitation above 1 mm). This index provides insight into
@@ -1268,36 +1041,44 @@ class PlotsAccessor:
 
         See Also
         --------
-        plot_days_above_threshold_mean : Plot the mean annual number of days above a temperature threshold.
+        plot_days_above_threshold : Plot the annual number of days above a temperature threshold.
         """
         get_or_create_dask_client()
         # Step 1: Select the data based on user parameters
-        selected_data, level_dim_name, level_op = self._select_data(
-            variable, latitude, longitude, level, time_range
+        from ..utils import select_process_data
+        selected_data = select_process_data(
+            self._obj, variable, latitude, longitude, level, time_range, season, year
         )
-        
-        current_data_for_ops = selected_data
-        
-        if level_op == 'range_selected' and level_dim_name and level_dim_name in current_data_for_ops.dims:
-            current_data_for_ops = current_data_for_ops.mean(dim=level_dim_name, skipna=True)
-            print(f"Averaging SDII across selected levels for '{variable}'.")
-
-        # Step 2: Calculate the SDII
-        time_coord_name = get_coord_name(current_data_for_ops, ['time', 't'])
-        if not time_coord_name or time_coord_name not in current_data_for_ops.dims:
+        level_dim_name = get_coord_name(selected_data, ['level', 'lev', 'plev'])
+        level_op = None
+        if level is not None and isinstance(level, slice):
+            level_op = 'range_selected'
+        elif level is not None:
+            level_op = 'single_selected'
+        # Step 2: Calculate the SDII using the correct logic
+        time_coord_name = get_coord_name(selected_data, ['time', 't'])
+        if not time_coord_name or time_coord_name not in selected_data.dims:
             raise ValueError(f"SDII calculation requires time dimension for '{variable}'.")
 
-        # Count wet days (above 1 mm)
-        wet_days_count = (current_data_for_ops > 1e-5).astype(int)
-        if wet_days_count.chunks:
-            print(f"Computing annual wet day count for SDII using Dask...")
-            with ProgressBar(): annual_wet_days = self._apply_yearly_op_then_mean(wet_days_count, time_coord_name, 'sum', dask_op_name="wet days").compute()
-            with ProgressBar(): total_precipitation = self._apply_yearly_op_then_mean(current_data_for_ops, time_coord_name, 'sum', dask_op_name="total precip").compute()
-        else:
-            annual_wet_days = self._apply_yearly_op_then_mean(wet_days_count, time_coord_name, 'sum', dask_op_name="wet days")
-            total_precipitation = self._apply_yearly_op_then_mean(current_data_for_ops, time_coord_name, 'sum', dask_op_name="total precip")
+        # A "wet day" is when precipitation is above the threshold (e.g., 1mm/day, here using 1e-5 as a proxy for > 0)
+        wet_day_threshold = 1e-5  # Threshold for wet days
+        is_wet_day = (selected_data > wet_day_threshold)
 
-        sdii = total_precipitation / annual_wet_days.where(annual_wet_days > 0, np.nan)
+        # Numerator: Total precipitation on WET DAYS ONLY
+        precip_on_wet_days = selected_data.where(is_wet_day)
+        annual_total_precip_on_wet_days = self._apply_yearly_op_then_mean(precip_on_wet_days, time_coord_name, 'sum', dask_op_name="precip on wet days")
+
+        # Denominator: Count of WET DAYS
+        annual_wet_days_count = self._apply_yearly_op_then_mean(is_wet_day.astype(int), time_coord_name, 'sum', dask_op_name="wet days count")
+
+        # Calculate SDII, avoiding division by zero
+        sdii = annual_total_precip_on_wet_days / annual_wet_days_count.where(annual_wet_days_count > 0, np.nan)
+        
+        # Compute the result if it's a Dask array
+        if sdii.chunks:
+            warnings.warn("Computing SDII using Dask...", UserWarning)
+            with ProgressBar(): 
+                sdii = sdii.compute()
 
         # Step 3: Pass to the generic spatial plotting function
         return self._plot_spatial_data(
@@ -1310,13 +1091,13 @@ class PlotsAccessor:
             projection=projection
         )
 
-    def plot_days_above_threshold_mean(self, variable='tasmax', threshold=25, latitude=None, longitude=None, level=None,
-                                       time_range=None, contour=False, figsize=(16, 10),
-                                       cmap='Reds',
-                                       land_only=False, levels=30, save_plot_path=None,
-                                       projection='PlateCarree'):
+    def plot_days_above_threshold(self, variable='tasmax', threshold=25, latitude=None, longitude=None, level=None,
+                                  time_range=None, season='annual', year=None, contour=False, figsize=(16, 10),
+                                  cmap='Reds',
+                                  land_only=False, levels=30, save_plot_path=None, title=None,
+                                  projection='PlateCarree'):
         """
-        Plot the mean annual number of days where a variable is above a threshold.
+        Plot the annual number of days where a variable is above a threshold.
 
         For temperature, this can represent "summer days" (e.g., tasmax > 25°C).
 
@@ -1357,35 +1138,35 @@ class PlotsAccessor:
 
         See Also
         --------
-        plot_consecutive_dry_days_max_mean : Plot the mean annual maximum number of consecutive dry days.
+        plot_cdd : Plot the annual maximum number of consecutive dry days.
         """
         get_or_create_dask_client()
         # Step 1: Select the data based on user parameters
-        selected_data, level_dim_name, level_op = self._select_data(
-            variable, latitude, longitude, level, time_range
+        from ..utils import select_process_data
+        selected_data = select_process_data(
+            self._obj, variable, latitude, longitude, level, time_range, season, year
         )
-        
-        current_data_for_ops = selected_data
-        
-        if level_op == 'range_selected' and level_dim_name and level_dim_name in current_data_for_ops.dims:
-            current_data_for_ops = current_data_for_ops.mean(dim=level_dim_name, skipna=True)
-            print(f"Averaging across selected levels for '{variable}' before calculating days above threshold.")
-
+        level_dim_name = get_coord_name(selected_data, ['level', 'lev', 'plev'])
+        level_op = None
+        if level is not None and isinstance(level, slice):
+            level_op = 'range_selected'
+        elif level is not None:
+            level_op = 'single_selected'
         # Step 2: Calculate the mean annual number of days above the threshold
-        time_coord_name = get_coord_name(current_data_for_ops, ['time', 't'])
-        if not time_coord_name or time_coord_name not in current_data_for_ops.dims:
+        time_coord_name = get_coord_name(selected_data, ['time', 't'])
+        if not time_coord_name or time_coord_name not in selected_data.dims:
             raise ValueError(f"Days above threshold calculation requires time dimension for '{variable}'.")
 
         # Count days above threshold
-        days_above_threshold = (current_data_for_ops > threshold).astype(int)
+        days_above_threshold = (selected_data > threshold).astype(int)
         if days_above_threshold.chunks:
-            print(f"Computing annual days above threshold for Dask...")
+            warnings.warn(f"Computing annual days above threshold for Dask...", UserWarning)
             with ProgressBar(): mean_days_above = self._apply_yearly_op_then_mean(days_above_threshold, time_coord_name, 'sum', dask_op_name="days above threshold").compute()
         else:
             mean_days_above = self._apply_yearly_op_then_mean(days_above_threshold, time_coord_name, 'sum', dask_op_name="days above threshold")
 
         # Step 3: Pass to the generic spatial plotting function
-        units_str = f" ({variable_units})" if (variable_units := selected_data.attrs.get('units')) else ""
+        units_str = f" ({selected_data.attrs.get('units')})" if (variable_units := selected_data.attrs.get('units')) else ""
         return self._plot_spatial_data(
             mean_days_above, variable, selected_data.attrs, self._obj[variable],
             selected_data, time_coord_name, time_range,
@@ -1396,13 +1177,13 @@ class PlotsAccessor:
             projection=projection
         )
 
-    def plot_consecutive_dry_days_max_mean(self, variable='prate', threshold=1, latitude=None, longitude=None, level=None,
-                                           time_range=None, contour=False, figsize=(16, 10),
-                                           cmap='YlOrBr',
-                                           land_only=False, levels=30, save_plot_path=None,
-                                           projection='PlateCarree'):
+    def plot_cdd(self, variable='prate', threshold=1, latitude=None, longitude=None, level=None,
+                 time_range=None, season='annual', year=None, contour=False, figsize=(16, 10),
+                 cmap='YlOrBr',
+                 land_only=False, levels=30, save_plot_path=None, title=None,
+                 projection='PlateCarree'):
         """
-        Plot the mean of the annual maximum number of consecutive dry days (CDD).
+        Plot the Consecutive Dry Days (CDD) index.
 
         A "dry day" is defined as a day with precipitation below a certain threshold.
         This index is useful for identifying changes in dry spell patterns and durations.
@@ -1444,26 +1225,39 @@ class PlotsAccessor:
 
         See Also
         --------
-        plot_consecutive_wet_days : Plot the mean annual maximum number of consecutive wet days.
+        plot_consecutive_wet_days : Plot the annual maximum number of consecutive wet days.
         """
         get_or_create_dask_client()
         # Step 1: Select the data based on user parameters
-        selected_data, level_dim_name, level_op = self._select_data(
-            variable, latitude, longitude, level, time_range
+        from ..utils import select_process_data
+        selected_data = select_process_data(
+            self._obj, variable, latitude, longitude, level, time_range, season, year
         )
-        
-        current_data_for_ops = selected_data
-        
-        if level_op == 'range_selected' and level_dim_name and level_dim_name in current_data_for_ops.dims:
-            current_data_for_ops = current_data_for_ops.mean(dim=level_dim_name, skipna=True)
-            print(f"Averaging CDD across selected levels for '{variable}'.")
-
-        # Step 2: Calculate the mean of the annual maximum consecutive dry days
-        time_coord_name = get_coord_name(current_data_for_ops, ['time', 't'])
-        if not time_coord_name or time_coord_name not in current_data_for_ops.dims:
+        level_dim_name = get_coord_name(selected_data, ['level', 'lev', 'plev'])
+        level_op = None
+        if level is not None and isinstance(level, slice):
+            level_op = 'range_selected'
+        elif level is not None:
+            level_op = 'single_selected'
+        # Step 2: Calculate the mean of the annual maximum consecutive dry days using the correct CDD logic
+        time_coord_name = get_coord_name(selected_data, ['time', 't'])
+        if not time_coord_name or time_coord_name not in selected_data.dims:
             raise ValueError(f"CDD calculation requires time dimension for '{variable}'.")
 
-        mean_cdd = self._apply_yearly_op_then_mean(current_data_for_ops, time_coord_name, 'max', dask_op_name="maxima")
+        # Use the correct CDD calculation that finds the maximum consecutive run length
+        warnings.warn("Calculating Consecutive Dry Days (CDD)...", UserWarning)
+        mean_cdd = self._calc_max_consecutive_days(
+            data_in=selected_data,
+            time_coord_name=time_coord_name,
+            threshold_val=threshold,
+            spell_type_is_above_thresh=False  # False because we want days *below* the threshold
+        )
+        
+        # Compute the result if it's a Dask array
+        if mean_cdd.chunks:
+            warnings.warn("Computing CDD using Dask...", UserWarning)
+            with ProgressBar(): 
+                mean_cdd = mean_cdd.compute()
 
         # Step 3: Pass to the generic spatial plotting function
         return self._plot_spatial_data(
@@ -1476,14 +1270,14 @@ class PlotsAccessor:
             projection=projection
         )
 
-    def plot_warm_spell_duration_mean(self, variable='tasmax', threshold=25, min_consecutive_days=6,
-                                      latitude=None, longitude=None, level=None,
-                                      time_range=None, contour=False, figsize=(16, 10),
-                                      cmap='Oranges',
-                                      land_only=False, levels=30, save_plot_path=None,
-                                      projection='PlateCarree'):
+    def plot_wsdi(self, variable='tasmax', threshold=25, min_consecutive_days=6,
+                  latitude=None, longitude=None, level=None,
+                  time_range=None, season='annual', year=None, contour=False, figsize=(16, 10),
+                  cmap='Oranges',
+                  land_only=False, levels=30, save_plot_path=None, title=None,
+                  projection='PlateCarree'):
         """
-        Plot the mean Warm Spell Duration Index (WSDI).
+        Plot the Warm Spell Duration Index (WSDI).
 
         WSDI is the total number of days per year that are part of a "warm spell".
         A warm spell is defined as a period of at least `min_consecutive_days`
@@ -1528,31 +1322,40 @@ class PlotsAccessor:
 
         See Also
         --------
-        plot_cold_spell_duration_mean : Plot the mean Cold Spell Duration Index (CSDI).
+        plot_csdi : Plot the Cold Spell Duration Index (CSDI).
         """
         get_or_create_dask_client()
         # Step 1: Select the data based on user parameters
-        selected_data, level_dim_name, level_op = self._select_data(
-            variable, latitude, longitude, level, time_range
+        from ..utils import select_process_data
+        selected_data = select_process_data(
+            self._obj, variable, latitude, longitude, level, time_range, season, year
         )
-        current_data_for_ops = selected_data
-        
-        if level_op == 'range_selected' and level_dim_name and level_dim_name in current_data_for_ops.dims:
-            current_data_for_ops = current_data_for_ops.mean(dim=level_dim_name, skipna=True)
-            print(f"Averaging WSDI across selected levels for '{variable}'.")
-
-        # Step 2: Calculate the mean annual number of days in warm spells
-        time_coord_name = get_coord_name(current_data_for_ops, ['time', 't'])
-        if not time_coord_name or time_coord_name not in current_data_for_ops.dims:
+        level_dim_name = get_coord_name(selected_data, ['level', 'lev', 'plev'])
+        level_op = None
+        if level is not None and isinstance(level, slice):
+            level_op = 'range_selected'
+        elif level is not None:
+            level_op = 'single_selected'
+        # Step 2: Calculate the mean annual number of days in warm spells using the correct WSDI logic
+        time_coord_name = get_coord_name(selected_data, ['time', 't'])
+        if not time_coord_name or time_coord_name not in selected_data.dims:
             raise ValueError(f"WSDI calculation requires time dimension for '{variable}'.")
 
-        # Identify warm spells
-        warm_spell_condition = (current_data_for_ops > threshold)
-        if warm_spell_condition.chunks:
-            print(f"Computing annual warm spell count for Dask...")
-            with ProgressBar(): annual_warm_spells = self._apply_yearly_op_then_mean(warm_spell_condition.astype(int), time_coord_name, 'sum', dask_op_name="warm spells").compute()
-        else:
-            annual_warm_spells = self._apply_yearly_op_then_mean(warm_spell_condition.astype(int), time_coord_name, 'sum', dask_op_name="warm spells")
+        # Use the correct WSDI calculation that counts days in qualifying spells
+        warnings.warn("Calculating Warm Spell Duration Index (WSDI)...", UserWarning)
+        annual_warm_spells = self._calc_days_in_spell(
+            data_in=selected_data,
+            time_coord_name=time_coord_name,
+            threshold_val=threshold,
+            min_consecutive_days=min_consecutive_days,
+            spell_type_is_above_thresh=True
+        )
+        
+        # Compute the result if it's a Dask array
+        if annual_warm_spells.chunks:
+            warnings.warn("Computing WSDI using Dask...", UserWarning)
+            with ProgressBar(): 
+                annual_warm_spells = annual_warm_spells.compute()
 
         # Step 3: Pass to the generic spatial plotting function
         return self._plot_spatial_data(
@@ -1565,14 +1368,14 @@ class PlotsAccessor:
             projection=projection
         )
 
-    def plot_cold_spell_duration_mean(self, variable='tasmin', threshold=0, min_consecutive_days=6,
-                                      latitude=None, longitude=None, level=None,
-                                      time_range=None, contour=False, figsize=(16, 10),
-                                      cmap='Blues',
-                                      land_only=False, levels=30, save_plot_path=None,
-                                      projection='PlateCarree'):
+    def plot_csdi(self, variable='tasmin', threshold=0, min_consecutive_days=6,
+                  latitude=None, longitude=None, level=None,
+                  time_range=None, season='annual', year=None, contour=False, figsize=(16, 10),
+                  cmap='Blues',
+                  land_only=False, levels=30, save_plot_path=None, title=None,
+                  projection='PlateCarree'):
         """
-        Plot the mean Cold Spell Duration Index (CSDI).
+        Plot the Cold Spell Duration Index (CSDI).
 
         CSDI is the total number of days per year that are part of a "cold spell".
         A cold spell is defined as a period of at least `min_consecutive_days`
@@ -1617,31 +1420,40 @@ class PlotsAccessor:
 
         See Also
         --------
-        plot_warm_spell_duration_mean : Plot the mean Warm Spell Duration Index (WSDI).
+        plot_wsdi : Plot the Warm Spell Duration Index (WSDI).
         """
         get_or_create_dask_client()
         # Step 1: Select the data based on user parameters
-        selected_data, level_dim_name, level_op = self._select_data(
-            variable, latitude, longitude, level, time_range
+        from ..utils import select_process_data
+        selected_data = select_process_data(
+            self._obj, variable, latitude, longitude, level, time_range, season, year
         )
-        current_data_for_ops = selected_data
-        
-        if level_op == 'range_selected' and level_dim_name and level_dim_name in current_data_for_ops.dims:
-            current_data_for_ops = current_data_for_ops.mean(dim=level_dim_name, skipna=True)
-            print(f"Averaging CSDI across selected levels for '{variable}'.")
-
-        # Step 2: Calculate the mean annual number of days in cold spells
-        time_coord_name = get_coord_name(current_data_for_ops, ['time', 't'])
-        if not time_coord_name or time_coord_name not in current_data_for_ops.dims:
+        level_dim_name = get_coord_name(selected_data, ['level', 'lev', 'plev'])
+        level_op = None
+        if level is not None and isinstance(level, slice):
+            level_op = 'range_selected'
+        elif level is not None:
+            level_op = 'single_selected'
+        # Step 2: Calculate the mean annual number of days in cold spells using the correct CSDI logic
+        time_coord_name = get_coord_name(selected_data, ['time', 't'])
+        if not time_coord_name or time_coord_name not in selected_data.dims:
             raise ValueError(f"CSDI calculation requires time dimension for '{variable}'.")
 
-        # Identify cold spells
-        cold_spell_condition = (current_data_for_ops < threshold)
-        if cold_spell_condition.chunks:
-            print(f"Computing annual cold spell count for Dask...")
-            with ProgressBar(): annual_cold_spells = self._apply_yearly_op_then_mean(cold_spell_condition.astype(int), time_coord_name, 'sum', dask_op_name="cold spells").compute()
-        else:
-            annual_cold_spells = self._apply_yearly_op_then_mean(cold_spell_condition.astype(int), time_coord_name, 'sum', dask_op_name="cold spells")
+        # Use the correct CSDI calculation that counts days in qualifying spells
+        warnings.warn("Calculating Cold Spell Duration Index (CSDI)...", UserWarning)
+        annual_cold_spells = self._calc_days_in_spell(
+            data_in=selected_data,
+            time_coord_name=time_coord_name,
+            threshold_val=threshold,
+            min_consecutive_days=min_consecutive_days,
+            spell_type_is_above_thresh=False
+        )
+        
+        # Compute the result if it's a Dask array
+        if annual_cold_spells.chunks:
+            warnings.warn("Computing CSDI using Dask...", UserWarning)
+            with ProgressBar(): 
+                annual_cold_spells = annual_cold_spells.compute()
 
         # Step 3: Pass to the generic spatial plotting function
         return self._plot_spatial_data(
@@ -1650,6 +1462,6 @@ class PlotsAccessor:
             level_op, level_dim_name, "Annual", contour,
             figsize, cmap, land_only, levels, save_plot_path,
             plot_operation_name="Cold Spell Duration Index (CSDI)",
-            cbar_prefix="Mean ",
+            cbar_prefix="Mean",
             projection=projection
         )

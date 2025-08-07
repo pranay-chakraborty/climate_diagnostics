@@ -5,7 +5,6 @@ import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator
 from dask.diagnostics import ProgressBar
 import pandas as pd
-from statsmodels.tsa.seasonal import STL
 import warnings
 from scipy import stats
 import cartopy.crs as ccrs
@@ -15,12 +14,12 @@ import logging
 from ..utils import get_coord_name, select_process_data, get_spatial_mean, get_or_create_dask_client
 from ..utils.plot_utils import get_projection
 
-# Try to import chunking utilities
+# Try to import statsmodels for trend analysis
 try:
-    from ..utils.chunking_utils import rechunk_dataset, suggest_chunking_strategy, dynamic_chunk_calculator
-    CHUNKING_AVAILABLE = True
+    from statsmodels.tsa.seasonal import STL
+    STATSMODELS_AVAILABLE = True
 except ImportError:
-    CHUNKING_AVAILABLE = False
+    STATSMODELS_AVAILABLE = False
 
 @xr.register_dataset_accessor("climate_trends")
 class TrendsAccessor:
@@ -38,63 +37,34 @@ class TrendsAccessor:
     """
     
     # --------------------------------------------------------------------------
-    # INITIALIZATION
+    # INITIALIZATION AND HELPERS
     # --------------------------------------------------------------------------
     def __init__(self, xarray_obj):
         self._obj = xarray_obj
 
-    # --------------------------------------------------------------------------
-    # CHUNKING AND OPTIMIZATION METHODS
-    # --------------------------------------------------------------------------
-    def optimize_for_trends(self, variable: Optional[str] = None, 
-                           operation_type: str = 'timeseries', 
-                           performance_priority: str = 'balanced') -> Optional[xr.Dataset]:
+    def _warn_if_not_chunked(self, operation_name: str) -> None:
         """
-        Optimize dataset chunking specifically for trend analysis workflows.
-        
-        This method applies dynamic, pre-configured chunking strategies optimized for
-        various trend analysis scenarios using the new dynamic chunk calculator.
+        Warn users if data is not chunked when it might benefit from chunking.
         
         Parameters
         ----------
-        variable : str, optional
-            Variable to optimize for. If None, optimizes for all variables.
-        operation_type : str, optional
-            Specific trend analysis use case. Options:
-            - 'timeseries': General trend calculation (default)
-            - 'spatial': Grid-point trend analysis
-            - 'statistical': For statistical operations
-            - 'io': For I/O heavy operations
-        performance_priority : str, optional
-            Optimization priority. Options: 'memory', 'speed', 'balanced'.
-        
-        Returns
-        -------
-        xr.Dataset or None
-            Optimized dataset with trend-analysis-friendly chunking.
+        operation_name : str
+            Name of the operation being performed.
         """
-        if not CHUNKING_AVAILABLE:
-            warnings.warn("Chunking optimization not available because chunking_utils could not be imported.")
-            return self._obj
+        # Check if any data variables use Dask arrays
+        has_dask_arrays = any(
+            hasattr(var.data, 'chunks') for var in self._obj.data_vars.values()
+        )
         
-        try:
-            print(f"Optimizing chunks for operation '{operation_type}' with '{performance_priority}' priority...")
-            # Use the new dynamic chunk calculator for more sophisticated optimization
-            optimal_chunks = dynamic_chunk_calculator(
-                self._obj, 
-                operation_type=operation_type, 
-                performance_priority=performance_priority
+        if not has_dask_arrays:
+            warnings.warn(
+                f"Data is not chunked for '{operation_name}'. For large datasets, "
+                f"consider chunking your data before calling this method to improve "
+                f"memory efficiency and enable parallel processing. "
+                f"Example: data = data.chunk({'time': 120, 'lat': 50, 'lon': 50})",
+                UserWarning,
+                stacklevel=3
             )
-            print(f"Applying optimal chunks: {optimal_chunks}")
-            return self._obj.chunk(optimal_chunks)
-            
-        except Exception as e:
-            warnings.warn(f"Could not optimize for trends due to an error: {e}")
-            return self._obj
-
-    # --------------------------------------------------------------------------
-    # INTERNAL HELPER METHODS
-    # --------------------------------------------------------------------------
 
 
     # ==============================================================================
@@ -109,8 +79,10 @@ class TrendsAccessor:
                         latitude=None,
                         longitude=None,
                         level=None,
-                        frequency='M',
+                        time_range=None,
                         season='annual',
+                        year=None,
+                        frequency='M',
                         area_weighted=True,
                         period=12,
                         plot=True,
@@ -141,6 +113,14 @@ class TrendsAccessor:
         level : float, slice, or None, optional
             Vertical level selection. If a slice is provided, data is averaged over the levels.
             If None and multiple levels exist, the first level is used by default.
+        time_range : slice, optional
+            A slice defining the time period for the analysis. Defaults to the full range.
+        season : str, optional
+            Seasonal filter to apply before analysis. Supported: 'annual', 'jjas',
+            'djf', 'mam', 'jja', 'son'. Defaults to 'annual'.
+        year : int, optional
+            Filter data to a specific year. If provided, only data from this year
+            will be used in the analysis. Defaults to None (use all years).
         frequency : {'Y', 'M', 'D'}, optional
             The time frequency used to report the slope of the trend line.
             'Y' for per year, 'M' for per month, 'D' for per day. Defaults to 'M'.
@@ -179,6 +159,16 @@ class TrendsAccessor:
             If the variable is not found, no time coordinate is present, or if the
             data selection and processing result in an empty time series.
         """
+        # Check for statsmodels availability
+        if not STATSMODELS_AVAILABLE:
+            raise ImportError(
+                "statsmodels is required for trend analysis. "
+                "Install it with: pip install statsmodels"
+            )
+        
+        # Warn if data is not chunked
+        self._warn_if_not_chunked("trend calculation")
+        
         # Parameter validation
         if not isinstance(variable, str):
             raise TypeError("Variable must be a string")
@@ -197,7 +187,7 @@ class TrendsAccessor:
         
         # --- Step 2: Select and process data using the centralized utility ---
         data_selected = select_process_data(
-            self._obj, variable, latitude, longitude, level, season=season
+            self._obj, variable, latitude, longitude, level, time_range, season, year
         )
 
         is_point = (isinstance(latitude, (int, float)) and isinstance(longitude, (int, float)))
@@ -215,10 +205,10 @@ class TrendsAccessor:
         # --- Step 4: Convert to pandas Series for STL ---
         try:
             ts_pd = processed_ts_da.to_series()
-        except Exception:
+        except (ValueError, TypeError, AttributeError):
             try:
                 ts_pd = processed_ts_da.to_pandas()
-            except Exception as e:
+            except (ValueError, TypeError, AttributeError) as e:
                 raise ValueError(f"Could not convert DataArray to pandas Series: {e}")
 
         if not isinstance(ts_pd, pd.Series):
@@ -241,16 +231,16 @@ class TrendsAccessor:
         if len(ts_pd_clean) < min_stl_len:
             raise ValueError(f"Time series length ({len(ts_pd_clean)}) for STL is less than required minimum ({min_stl_len}). Need at least 2*period.")
 
-        print("Applying STL decomposition...")
+        warnings.warn("Applying STL decomposition...", UserWarning)
         try:
             stl_result = STL(ts_pd_clean, period=period, robust=True).fit()
-        except Exception as e:
+        except (ValueError, ImportError, RuntimeError) as e:
             raise ValueError(f"STL decomposition failed: {e}")
         
         trend_component = stl_result.trend.reindex(original_index)
 
         # --- Step 6: Perform linear regression on the trend component ---
-        print("Performing linear regression...")
+        warnings.warn("Performing linear regression...", UserWarning)
         trend_component_clean = trend_component.dropna()
         if trend_component_clean.empty:
             raise ValueError("Trend component is all NaNs after STL and dropna.")
@@ -269,7 +259,7 @@ class TrendsAccessor:
                 scale_seconds = 24 * 3600 * 365.25
                 time_unit_for_slope = "year"
             else:
-                print(f"Warning: Unknown frequency '{frequency}', defaulting to years for slope calculation.")
+                warnings.warn(f"Unknown frequency '{frequency}', defaulting to years for slope calculation.", UserWarning)
                 scale_seconds = 24 * 3600 * 365.25
                 time_unit_for_slope = "year"
             
@@ -298,7 +288,7 @@ class TrendsAccessor:
          
         # --- Step 7: Generate plot if requested ---
         if plot:
-            print("Generating plot...")
+            warnings.warn("Generating plot...", UserWarning)
             plt.figure(figsize=(16, 10), dpi=100)
             
             # Plot the raw STL trend and the linear fit
@@ -338,16 +328,16 @@ class TrendsAccessor:
             try:
                 ax.xaxis.set_major_locator(MaxNLocator(nbins=10, prune='both'))
             except TypeError:
-                print("Warning: Could not set major locator for x-axis due to index type.")
+                warnings.warn("Could not set major locator for x-axis due to index type.", UserWarning)
 
             plt.tight_layout()
             if save_plot_path is not None:
                 try:
                     plt.savefig(save_plot_path, bbox_inches='tight', dpi=300)
-                    print(f"Plot saved to: {save_plot_path}")
-                except Exception as e:
-                    print(f"Warning: Could not save plot to {save_plot_path}: {e}")
-            plt.show()
+                    warnings.warn(f"Plot saved to: {save_plot_path}", UserWarning)
+                except (OSError, IOError, ValueError) as e:
+                    warnings.warn(f"Could not save plot to {save_plot_path}: {e}", UserWarning)
+            # Note: plt.show() removed - user should call it explicitly if needed
 
         # --- Step 8: Return detailed results if requested ---
         if return_results:
@@ -374,18 +364,18 @@ class TrendsAccessor:
                            time_range=None,
                            level=None,
                            season='annual',
-                           num_years=1, 
-                           n_workers=4,
+                           year=None,
+                           frequency='Y',
                            robust_stl=True,
                            period=12,
                            plot_map=True,
-                           land_only=False,
-                           save_plot_path=None,
+                           figsize=(14, 8),
                            cmap='coolwarm',
-                           optimize_chunks=True,
-                           performance_priority: str = 'balanced',
+                           levels=30,
+                           land_only=False,
+                           projection='PlateCarree',
                            title=None,
-                           projection='PlateCarree'):
+                           save_plot_path=None):
         """
         Calculate and visualize spatial trends across a geographic domain.
 
@@ -413,11 +403,12 @@ class TrendsAccessor:
             exist, the first level is used by default.
         season : str, optional
             Seasonal filter to apply before analysis. Defaults to 'annual'.
-        num_years : int, optional
-            The number of years over which the trend should be reported (e.g., 1 for
-            trend per year, 10 for trend per decade). Defaults to 1.
-        n_workers : int, optional
-            The number of Dask workers to use for parallel computation. Defaults to 4.
+        year : int, optional
+            Filter data to a specific year. If provided, only data from this year
+            will be used in the analysis. Defaults to None (use all years).
+        frequency : {'Y', 'M', 'D'}, optional
+            The time frequency used to report the slope of the trend line.
+            'Y' for per year, 'M' for per month, 'D' for per day. Defaults to 'Y'.
         robust_stl : bool, optional
             If True, use a robust version of the STL algorithm, which is less sensitive
             to outliers. Defaults to True.
@@ -425,66 +416,73 @@ class TrendsAccessor:
             The periodicity of the seasonal component for STL. Defaults to 12.
         plot_map : bool, optional
             If True, plots the resulting spatial trend map. Defaults to True.
-        land_only : bool, optional
-            If True, the output map will mask ocean areas. Defaults to False.
-        save_plot_path : str or None, optional
-            Path to save the output trend map plot.
+        figsize : tuple, optional
+            Figure size for the spatial trend map. Defaults to (14, 8).
         cmap : str, optional
             The colormap to use for the trend map plot. Defaults to 'coolwarm'.
-        optimize_chunks : bool, optional
-            Whether to optimize chunking for spatial trends calculation. Defaults to True.
-        performance_priority : str, optional
-            Optimization priority for chunking. Options: 'memory', 'speed', 'balanced'.
+        levels : int, optional
+            Number of contour levels for the spatial trend map. Defaults to 30.
+        land_only : bool, optional
+            If True, the output map will mask ocean areas. Defaults to False.
+        projection : str, optional
+            The name of the cartopy projection to use. Defaults to 'PlateCarree'.
         title : str, optional
             The title for the plot. If not provided, a descriptive title will be
             generated automatically.
-        projection : str, optional
-            The name of the cartopy projection to use. Defaults to 'PlateCarree'.
+        save_plot_path : str or None, optional
+            Path to save the output trend map plot.
 
         Returns
         -------
         xr.DataArray
             A DataArray containing the calculated trend values for each grid point,
-            typically in units of [variable_units / num_years].
+            in units of [variable_units / frequency], where frequency is the specified
+            time unit ('Y', 'M', or 'D').
 
         Raises
         ------
         ValueError
             If essential coordinates (time, lat, lon) are not found, or if the
             data selection results in insufficient data for trend calculation.
+
+        Notes
+        -----
+        For large datasets, consider chunking your data before calling this method
+        to improve memory efficiency and enable parallel processing.
+        Example: data = data.chunk({'time': 120, 'lat': 50, 'lon': 50})
         """
+        
+        # Check for statsmodels availability
+        if not STATSMODELS_AVAILABLE:
+            raise ImportError(
+                "statsmodels is required for trend analysis. "
+                "Install it with: pip install statsmodels"
+            )
+        
+        # Warn if data is not chunked
+        self._warn_if_not_chunked("spatial trends")
         
         # Parameter validation
         if not isinstance(variable, str):
             raise TypeError("Variable must be a string")
-        if not isinstance(num_years, int) or num_years <= 0:
-            raise ValueError("num_years must be a positive integer")
-        if not isinstance(n_workers, int) or n_workers <= 0:
-            raise ValueError("n_workers must be a positive integer")
+        if frequency.upper() not in ['Y', 'M', 'D']:
+            raise ValueError("frequency must be one of 'Y', 'M', 'D', 'y', 'm', or 'd'")
         if not isinstance(period, int) or period <= 0:
             raise ValueError("period must be a positive integer")
         
-        # Optimize chunking for spatial trends if requested
-        if optimize_chunks and CHUNKING_AVAILABLE:
-            try:
-                # Use the more advanced dynamic chunk calculator
-                dataset = self.optimize_for_trends(variable=variable, 
-                                                   operation_type='spatial', 
-                                                   performance_priority=performance_priority)
-                print(f"Dataset optimized for spatial trends.")
-            except Exception as e:
-                warnings.warn(f"Could not optimize chunks: {e}. Using original dataset.")
-                dataset = self._obj
-        else:
-            dataset = self._obj
+        # Use the original dataset
+        dataset = self._obj
         
         # --- Step 1: Set up labels and coordinates ---
-        if num_years == 1: 
-            period_str_label = "year"
-        elif num_years == 10: 
-            period_str_label = "decade"
-        else: 
-            period_str_label = f"{num_years} years"
+        frequency_upper = frequency.upper()
+        if frequency_upper == 'Y':
+            time_unit_label = "year"
+        elif frequency_upper == 'M':
+            time_unit_label = "month"
+        elif frequency_upper == 'D':
+            time_unit_label = "day"
+        else:
+            time_unit_label = "time_unit"
 
         time_coord_name = get_coord_name(dataset, ['time', 't'])
         lat_coord_name = get_coord_name(dataset, ['lat', 'latitude'])
@@ -495,34 +493,19 @@ class TrendsAccessor:
         if variable not in dataset.data_vars:
             raise ValueError(f"Variable '{variable}' not found in dataset")
 
-        # --- Step 2: Use existing Dask client or create one for this operation ---
-        existing_client = None
-        cluster = None
-        client = None
-        
-        try:
-            # Try to get existing Dask client
-            existing_client = Client.current()
-            print(f"Using existing Dask client: {existing_client.dashboard_link}")
-        except (ValueError, AttributeError):
-            # No existing client, create a new one
-            try:
-                cluster = LocalCluster(n_workers=n_workers, threads_per_worker=1, silence_logs=logging.WARNING)
-                client = Client(cluster)
-                print(f"Created new Dask client for spatial trends: {client.dashboard_link}")
-            except Exception as e:
-                print(f"Warning: Could not create Dask cluster: {e}. Will use synchronous computation.")
+        # --- Step 2: Initialize Dask client ---
+        get_or_create_dask_client()
         
         try:
             # --- Step 3: Select, filter, and prepare the data using the utility ---
             data_var = select_process_data(
-                dataset, variable, latitude, longitude, level, time_range, season
+                dataset, variable, latitude, longitude, level, time_range, season, year
             )
             
             if data_var[time_coord_name].size < 2 * period:
                 raise ValueError(f"Insufficient time points ({data_var[time_coord_name].size}) after filtering. Need at least {2 * period}.")
             
-            print(f"Data selected for spatial trends: {data_var.sizes}")
+            warnings.warn(f"Data selected for spatial trends: {data_var.sizes}", UserWarning)
             level_selection_info_title = ""
             level_coord_name = get_coord_name(data_var, ['level', 'lev', 'plev'])
             if level_coord_name and level_coord_name in data_var.coords:
@@ -564,19 +547,28 @@ class TrendsAccessor:
                         return np.nan
                     
                     first_date = trend_clean.index.min()
-                    scale_seconds_in_year = 24 * 3600 * 365.25
                     
-                    x_numeric_for_regression = ((trend_clean.index - first_date).total_seconds() / scale_seconds_in_year).values
+                    # Use the same frequency logic as calculate_trend
+                    if frequency_upper == 'M':
+                        scale_seconds = 24 * 3600 * (365.25 / 12)
+                    elif frequency_upper == 'D':
+                        scale_seconds = 24 * 3600
+                    elif frequency_upper == 'Y':
+                        scale_seconds = 24 * 3600 * 365.25
+                    else:
+                        scale_seconds = 24 * 3600 * 365.25  # Default to years
+                    
+                    x_numeric_for_regression = ((trend_clean.index - first_date).total_seconds() / scale_seconds).values
                     y_values_for_regression = trend_clean.values
                     
-                    slope_per_year, _, _, _, _ = stats.linregress(x_numeric_for_regression, y_values_for_regression)
+                    slope, _, _, _, _ = stats.linregress(x_numeric_for_regression, y_values_for_regression)
 
-                    if np.isnan(slope_per_year): 
+                    if np.isnan(slope): 
                         return np.nan
 
-                    # d. Return slope scaled by the desired number of years
-                    return slope_per_year * num_years
-                except Exception:
+                    # d. Return slope (now correctly scaled by frequency)
+                    return slope
+                except (ValueError, TypeError, AttributeError):
                     return np.nan
 
             # --- Step 5: Chunk data and apply the trend function in parallel with Dask ---
@@ -584,7 +576,7 @@ class TrendsAccessor:
                                        lat_coord_name: 'auto',
                                        lon_coord_name: 'auto'})
 
-            print("Computing spatial trends in parallel with xarray.apply_ufunc...")
+            warnings.warn("Computing spatial trends in parallel with xarray.apply_ufunc...", UserWarning)
             trend_da = xr.apply_ufunc(
                 apply_stl_slope_spatial,
                 data_var,
@@ -596,34 +588,34 @@ class TrendsAccessor:
                 dask='parallelized',
                 output_dtypes=[float],
                 dask_gufunc_kwargs={'allow_rechunk': True} 
-            ).rename(f"{variable}_trend_per_{period_str_label}")
+            ).rename(f"{variable}_trend_per_{time_unit_label}")
 
             # --- Step 6: Trigger computation and get the results ---
             with ProgressBar(dt=2.0):
                 trend_computed_map = trend_da.compute()
-            print("Spatial trend computation complete.")
+            warnings.warn("Spatial trend computation complete.", UserWarning)
 
             # --- Step 7: Plot the resulting trend map if requested ---
             if plot_map:
-                print("Generating spatial trend map...")
+                warnings.warn("Generating spatial trend map...", UserWarning)
                 try:
                     start_time_str = pd.to_datetime(data_var[time_coord_name].min().item()).strftime('%Y-%m')
                     end_time_str = pd.to_datetime(data_var[time_coord_name].max().item()).strftime('%Y-%m')
                     time_period_title_str = f"{start_time_str} to {end_time_str}"
-                except Exception: time_period_title_str = "Selected Time Period"
+                except (ValueError, TypeError, AttributeError): time_period_title_str = "Selected Time Period"
 
                 data_units = data_var.attrs.get('units', '')
                 var_long_name = data_var.attrs.get('long_name', variable)
-                cbar_label_str = f"Trend ({data_units} / {period_str_label})" if data_units else f"Trend ({period_str_label})"
+                cbar_label_str = f"Trend ({data_units} / {time_unit_label})" if data_units else f"Trend ({time_unit_label})"
 
-                fig = plt.figure(figsize=(14, 8))
+                fig = plt.figure(figsize=figsize)
                 proj = get_projection(projection)
                 ax = fig.add_subplot(1, 1, 1, projection=proj)
 
                 # Create the plot using contourf for filled contours
                 contour_plot = trend_computed_map.plot.contourf(
                     ax=ax, transform=ccrs.PlateCarree(), cmap=cmap,
-                    levels=30,
+                    levels=levels,
                     robust=True,
                     extend='both',
                     cbar_kwargs={'label': cbar_label_str, 'orientation': 'vertical', 'shrink': 0.8, 'pad':0.05}
@@ -650,7 +642,7 @@ class TrendsAccessor:
                 # Set a descriptive title
                 if title is None:
                     season_title_str = season.upper() if season.lower() != 'annual' else 'Annual'
-                    plot_title = (f"{season_title_str} {var_long_name.capitalize()} Trend ({period_str_label})\n"
+                    plot_title = (f"{season_title_str} {var_long_name.capitalize()} Trend ({time_unit_label})\n"
                                   f"{time_period_title_str}")
                     if level_selection_info_title: plot_title += f" at {level_selection_info_title}"
                 else:
@@ -661,24 +653,16 @@ class TrendsAccessor:
                 if save_plot_path:
                     try:
                         plt.savefig(save_plot_path, dpi=300, bbox_inches='tight')
-                        print(f"Plot saved to {save_plot_path}")
-                    except Exception as e:
-                        print(f"Warning: Could not save plot to {save_plot_path}: {e}")
-                plt.show()
+                        warnings.warn(f"Plot saved to {save_plot_path}", UserWarning)
+                    except (OSError, IOError, ValueError) as e:
+                        warnings.warn(f"Could not save plot to {save_plot_path}: {e}", UserWarning)
+                # Note: plt.show() removed - user should call it explicitly if needed
 
             # --- Step 8: Return the computed trend data ---
             return trend_computed_map
 
-        except Exception as e:
-            print(f"An error occurred during spatial trend processing: {e}")
+        except (ValueError, RuntimeError, MemoryError) as e:
+            warnings.warn(f"An error occurred during spatial trend processing: {e}", UserWarning)
             raise
-        finally:
-            # --- Step 9: Ensure Dask client and cluster are closed (only if we created them) ---
-            if client: 
-                client.close()
-            if cluster: 
-                cluster.close()
-            if client or cluster:
-                print("Dask client and cluster for spatial trends closed.")
 
 __all__ = ['TrendsAccessor']
