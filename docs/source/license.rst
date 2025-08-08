@@ -44,8 +44,8 @@ The MIT License is a permissive license that allows you to:
 ❌ **Without warranty:**
 - The software comes with no warranty or liability
 
-🤝 **Third-Party Licenses**
-===========================
+Third-Party Licenses
+====================
 
 This project depends on several open-source libraries:
 
@@ -64,8 +64,8 @@ This project depends on several open-source libraries:
 - **furo**: MIT License
 - **sphinx-design**: MIT License
 
-📋 **Full License Text**
-========================
+Full License Text
+=================
 
 The complete license text is also available in the `LICENSE` file in the project repository:
 

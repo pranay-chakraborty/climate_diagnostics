@@ -4,10 +4,10 @@ Basic Usage
 
 This tutorial will get you started with the Climate Diagnostics Toolkit. You'll learn how to load data, access the toolkit's features, and create your first visualization.
 
-🚀 **Getting Started**
-======================
+Getting Started
+===============
 
-First, let's import the necessary libraries:
+First, import the necessary libraries:
 
 .. code-block:: python
 
@@ -18,10 +18,10 @@ First, let's import the necessary libraries:
    # Import the climate diagnostics toolkit
    import climate_diagnostics
 
-📊 **Loading Climate Data**
-===========================
+Loading Climate Data
+=====================
 
-The toolkit works with xarray Datasets. Let's start with some sample data:
+The toolkit works with xarray Datasets. Start with some sample data:
 
 .. code-block:: python
 
@@ -48,8 +48,8 @@ The toolkit works with xarray Datasets. Let's start with some sample data:
        "lon": lon
    })
 
-🔧 **Accessing Toolkit Features**
-=================================
+Accessing Toolkit Features
+===========================
 
 Once you have a Dataset, the toolkit provides three main accessors:
 
@@ -64,10 +64,10 @@ Once you have a Dataset, the toolkit provides three main accessors:
    print(dir(ds.climate_timeseries))
    print(dir(ds.climate_trends))
 
-� **Your First Plot**
-======================
+Your First Plot
+===============
 
-Let's create a simple temperature map:
+Create a simple temperature map:
 
 .. code-block:: python
 
@@ -78,8 +78,8 @@ Let's create a simple temperature map:
    )
    plt.show()
 
-📈 **Time Series Analysis**
-===========================
+Time Series Analysis
+=====================
 
 Extract and plot a time series:
 
@@ -92,8 +92,8 @@ Extract and plot a time series:
        longitude=slice(-120, -80)
    )
 
-📊 **Trend Analysis**
-======================
+Trend Analysis
+==============
 
 Calculate and visualize trends:
 
@@ -108,8 +108,8 @@ Calculate and visualize trends:
    
    print(f"Temperature trend: {trend.values:.3f} units/year")
 
-🎯 **Key Concepts**
-====================
+Key Concepts
+============
 
 .. note::
    **xarray Integration**: All toolkit features are accessed through xarray accessor methods (.climate_plots, .climate_timeseries, .climate_trends)
@@ -120,16 +120,16 @@ Calculate and visualize trends:
 .. warning::
    **Memory Management**: For large datasets, consider using Dask arrays or chunking your data.
 
-🔄 **Next Steps**
-==================
+Next Steps
+==========
 
 Now that you've learned the basics, you're ready to:
 
 - :doc:`../user_guide/plotting` - Learn advanced plotting techniques
 - :doc:`../api/index` - Explore the complete API reference
 
-💡 **Common Patterns**
-=======================
+Common Patterns
+===============
 
 Here are some common usage patterns you'll use frequently:
 

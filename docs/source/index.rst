@@ -240,8 +240,8 @@ Quick Examples
        variable="air"
    )
 
-🤝 **Contributing**
-====================
+Contributing
+============
 
 We welcome contributions! Please see our `Contributing Guide <contributing.html>`_ for details on:
 
@@ -250,8 +250,8 @@ We welcome contributions! Please see our `Contributing Guide <contributing.html>
 - Testing procedures
 - Submitting pull requests
 
-📧 **Support & Community**
-===========================
+Support & Community
+===================
 
 - **Documentation**: Complete documentation with examples
 - **Issues**: `GitHub Issues <https://github.com/pranay-chakraborty/climate_diagnostics/issues>`_

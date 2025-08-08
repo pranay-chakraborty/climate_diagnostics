@@ -4,8 +4,8 @@ Tutorials
 
 Welcome to the Climate Diagnostics Toolkit tutorials! These step-by-step guides will help you get the most out of the toolkit.
 
-📚 **Tutorial Series**
-=======================
+Tutorial Series
+===============
 
 .. toctree::
    :maxdepth: 2
@@ -13,13 +13,13 @@ Welcome to the Climate Diagnostics Toolkit tutorials! These step-by-step guides 
 
    basic_usage
 
-🎯 **What You'll Learn**
-=========================
+What You'll Learn
+=================
 
 .. grid:: 2
    :gutter: 3
 
-   .. grid-item-card:: 🚀 Getting Started
+   .. grid-item-card:: Getting Started
       :text-align: center
 
       Basic usage patterns and data loading
@@ -33,16 +33,16 @@ Welcome to the Climate Diagnostics Toolkit tutorials! These step-by-step guides 
          
          Start Here
 
-   .. grid-item-card:: 🗺️ Plotting
+   .. grid-item-card:: Plotting
       :text-align: center
 
-      Create beautiful climate visualizations
+      Create maps and visualizations
       
       +++
       
       See :doc:`../user_guide/plotting` for details
 
-   .. grid-item-card:: 📈 Time Series
+   .. grid-item-card:: Time Series
       :text-align: center
 
       Analyze temporal patterns and trends
@@ -51,7 +51,7 @@ Welcome to the Climate Diagnostics Toolkit tutorials! These step-by-step guides 
       
       Time series analysis tutorials
 
-   .. grid-item-card:: 🔬 Advanced
+   .. grid-item-card:: Advanced
       :text-align: center
 
       Statistical methods and custom workflows
@@ -60,18 +60,18 @@ Welcome to the Climate Diagnostics Toolkit tutorials! These step-by-step guides 
       
       Advanced analysis techniques
 
-💡 **Prerequisites**
-=====================
+Prerequisites
+=============
 
 Before starting these tutorials, make sure you have:
 
 - Python 3.11+ installed
 - Basic familiarity with NumPy and xarray
 - Climate Diagnostics Toolkit installed
-- Sample climate data (we'll show you how to get some!)
+- Sample climate data (tutorial will demonstrate how to obtain data)
 
-🔗 **Additional Resources**
-============================
+Additional Resources
+====================
 
 - :doc:`../quickstart` - Quick reference guide
 - :doc:`../api/index` - Complete API documentation

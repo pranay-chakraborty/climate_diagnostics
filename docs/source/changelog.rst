@@ -88,7 +88,7 @@ All notable changes to the Climate Diagnostics Toolkit will be documented here.
 
 **Initial Release**
 
-- 🎉 First public release of Climate Diagnostics Toolkit
+- First public release of Climate Diagnostics Toolkit
 - Basic plotting functionality
 - Time series analysis tools
 - Trend calculation methods

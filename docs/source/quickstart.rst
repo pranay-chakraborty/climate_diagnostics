@@ -288,5 +288,5 @@ Need Help?
 ==========
 
 - **Documentation**: Complete documentation with examples
-- 🐛 **Issues**: `GitHub Issues <https://github.com/pranay-chakraborty/climate_diagnostics/issues>`_
-- 💬 **Discussions**: `GitHub Discussions <https://github.com/pranay-chakraborty/climate_diagnostics/discussions>`_
+- **Issues**: `GitHub Issues <https://github.com/pranay-chakraborty/climate_diagnostics/issues>`_
+- **Discussions**: `GitHub Discussions <https://github.com/pranay-chakraborty/climate_diagnostics/discussions>`_

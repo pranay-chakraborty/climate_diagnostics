@@ -4,13 +4,13 @@ Contributing
 
 We welcome contributions to the Climate Diagnostics Toolkit! This guide will help you get started.
 
-🤝 **Ways to Contribute**
-===========================
+Ways to Contribute
+==================
 
 .. grid:: 2
    :gutter: 3
 
-   .. grid-item-card:: 🐛 Report Bugs
+   .. grid-item-card:: Report Bugs
       :text-align: center
 
       Found an issue? Let us know!
@@ -19,7 +19,7 @@ We welcome contributions to the Climate Diagnostics Toolkit! This guide will hel
       
       Report bugs on our `GitHub Issues <https://github.com/pranay-chakraborty/climate_diagnostics/issues>`_ page.
 
-   .. grid-item-card:: 💡 Suggest Features
+   .. grid-item-card:: Suggest Features
       :text-align: center
 
       Have an idea for improvement?
@@ -28,7 +28,7 @@ We welcome contributions to the Climate Diagnostics Toolkit! This guide will hel
       
       Start a discussion on our `GitHub Discussions <https://github.com/pranay-chakraborty/climate_diagnostics/discussions>`_ page.
 
-   .. grid-item-card:: 📝 Improve Documentation
+   .. grid-item-card:: Improve Documentation
       :text-align: center
 
       Help make our docs better!
@@ -37,7 +37,7 @@ We welcome contributions to the Climate Diagnostics Toolkit! This guide will hel
       
       Documentation improvements are always welcome.
 
-   .. grid-item-card:: 🔧 Code Contributions
+   .. grid-item-card:: Code Contributions
       :text-align: center
 
       Add new features or fix bugs
@@ -46,8 +46,8 @@ We welcome contributions to the Climate Diagnostics Toolkit! This guide will hel
       
       Submit pull requests with new functionality.
 
-🚀 **Getting Started**
-=======================
+Getting Started
+===============
 
 **1. Fork and Clone**
 
@@ -77,8 +77,8 @@ We welcome contributions to the Climate Diagnostics Toolkit! This guide will hel
 
    git checkout -b feature/your-feature-name
 
-🧪 **Development Workflow**
-============================
+Development Workflow
+====================
 
 **Code Style**
 
@@ -119,8 +119,8 @@ Build documentation locally:
    # View in browser
    open build/html/index.html
 
-📝 **Code Guidelines**
-=======================
+Code Guidelines
+===============
 
 **Python Style**
 
@@ -193,8 +193,8 @@ Build documentation locally:
        # Should be close to 1.0 per year
        assert abs(trend.values - 1.0) < 0.2
 
-📚 **Documentation Standards**
-===============================
+Documentation Standards
+=======================
 
 **Docstring Format**
 
@@ -261,8 +261,8 @@ Include examples in the `examples/` directory:
    )
    plt.show()
 
-🔄 **Pull Request Process**
-============================
+Pull Request Process
+====================
 
 **1. Prepare Your PR**
 
@@ -309,8 +309,8 @@ Include examples in the `examples/` directory:
    - [ ] Self-review completed
    - [ ] Documentation updated
 
-🐛 **Bug Reports**
-===================
+Bug Reports
+===========
 
 **Good Bug Report Template:**
 
@@ -336,8 +336,8 @@ Include examples in the `examples/` directory:
    ## Additional Context
    Any other relevant information
 
-💬 **Community Guidelines**
-============================
+Community Guidelines
+====================
 
 - Be respectful and inclusive
 - Help others learn and grow
@@ -345,8 +345,8 @@ Include examples in the `examples/` directory:
 - Share your knowledge and experience
 - Follow our Code of Conduct
 
-📧 **Getting Help**
-====================
+Getting Help
+============
 
 - **Questions**: Use GitHub Discussions
 - **Bugs**: https://github.com/pranay-chakraborty/climate_diagnostics/issues

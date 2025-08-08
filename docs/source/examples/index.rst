@@ -4,16 +4,16 @@ Examples
 
 Real-world examples demonstrating the Climate Diagnostics Toolkit in action.
 
-🌍 **Featured Examples**
-==========================
+Featured Examples
+=================
 
-📊 **Example Categories**
-==========================
+Example Categories
+==================
 
 .. grid:: 2
    :gutter: 3
 
-   .. grid-item-card:: 🗺️ Visualization Examples
+   .. grid-item-card:: Visualization Examples
       :text-align: center
 
       Beautiful climate maps and charts
@@ -22,25 +22,25 @@ Real-world examples demonstrating the Climate Diagnostics Toolkit in action.
       
       Basic plotting examples with real climate data
 
-   .. grid-item-card:: 📈 Analysis Examples  
+   .. grid-item-card:: Analysis Examples  
       :text-align: center
 
       Statistical analysis and trend detection
       
       +++
-      
-      Trend analysis examples and workflows
 
-   .. grid-item-card:: ⏱️ Time Series Examples
+      Data analysis examples
+
+   .. grid-item-card:: Temperature Examples
       :text-align: center
 
-      Temporal decomposition and forecasting
+      Temperature data analysis workflows
       
       +++
       
-      Time series analysis and decomposition examples
+      Temperature-specific analysis examples
 
-   .. grid-item-card:: 🔬 Advanced Examples
+   .. grid-item-card:: Advanced Examples
       :text-align: center
 
       Multi-model evaluation and comparison
@@ -49,8 +49,8 @@ Real-world examples demonstrating the Climate Diagnostics Toolkit in action.
       
       Advanced analysis techniques and workflows
 
-🎯 **What You'll Find**
-========================
+What You'll Find
+================
 
 Each example includes:
 
@@ -60,8 +60,8 @@ Each example includes:
 - Well-formatted figures
 - Best practices and tips
 
-📁 **Download Examples**
-=========================
+Download Examples
+=================
 
 All examples are available as Jupyter notebooks that you can download and run locally:
 

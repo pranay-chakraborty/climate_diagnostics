@@ -65,7 +65,7 @@ What's Covered
       
       See :doc:`../api/trends` for API reference
 
-   .. grid-item-card:: 🔬 Advanced Guide
+   .. grid-item-card:: Advanced Guide
       :text-align: center
 
       Expert techniques and workflows
