@@ -4,6 +4,7 @@ import xarray as xr
 import matplotlib.pyplot as plt
 import cartopy.crs as ccrs
 from cartopy.feature import NaturalEarthFeature
+from cartopy.util import add_cyclic_point
 from dask.diagnostics import ProgressBar
 
 from ..utils.data_utils import get_coord_name, filter_by_season, select_process_data
@@ -66,6 +67,11 @@ class PlotsAccessor:
         ax.add_feature(NaturalEarthFeature('physical', 'ocean', '50m'), zorder=0, facecolor='#D3D3D3')
         ax.add_feature(NaturalEarthFeature('physical', 'land', '50m'), zorder=0, edgecolor='black', facecolor='#fbfbfb')
         ax.add_feature(NaturalEarthFeature('physical', 'coastline', '50m'), zorder=1, edgecolor='black', facecolor='none')
+        
+        # Add 50m country borders with dotted gray lines
+        ax.add_feature(NaturalEarthFeature('cultural', 'admin_0_boundary_lines_land', '50m'),
+                       edgecolor='black', facecolor='none', linestyle=':', linewidth=0.8)
+        
         ax.gridlines(draw_labels=True, dms=True, x_inline=False, y_inline=False)
 
         # Optionally mask out the ocean to focus on land areas.
@@ -223,7 +229,7 @@ class PlotsAccessor:
             The finalized Axes object.
         """
         if plot_object:
-            plt.colorbar(plot_object, label=cbar_label, orientation='vertical', pad=0.05, shrink=0.8, ax=ax)
+            plt.colorbar(plot_object, label=cbar_label, orientation='vertical', pad=0.1, shrink=0.8, ax=ax)
         ax.set_title(title_str, fontsize=12, loc='center')
         
         # Set the map extent to the data's boundaries.
@@ -327,6 +333,9 @@ class PlotsAccessor:
         if not lat_name or not lon_name:
             raise ValueError(f"Lat/Lon coordinates not found in processed data for '{original_variable_name}'.")
         
+        # Step 2.5: Handle cyclic longitude to remove the white line artifact
+        data_cy, lon_cy = add_cyclic_point(processed_data_to_plot.values, coord=processed_data_to_plot[lon_name])
+        
         # Step 3: Generate a descriptive title for the plot.
         if title is None:
             title = self._generate_title(
@@ -346,21 +355,28 @@ class PlotsAccessor:
 
         # Step 4: Plot the data using either contour or contourf.
         plot_obj = None
+        
+        # Use a dictionary for common keywords to keep it clean
+        plot_kwargs = {
+            'transform': ccrs.PlateCarree(),
+            'levels': levels,
+            'cmap': cmap,
+            'zorder': 0  # Draw the data layer underneath the coastlines
+        }
+        
         if contour:
             plot_obj = ax.contour(
-                processed_data_to_plot[lon_name],
+                lon_cy,  # Use cyclic longitude
                 processed_data_to_plot[lat_name],
-                processed_data_to_plot,
-                transform=ccrs.PlateCarree(),
-                levels=levels
+                data_cy,  # Use cyclic data
+                **plot_kwargs
             )
         else:
             plot_obj = ax.contourf(
-                processed_data_to_plot[lon_name],
+                lon_cy,  # Use cyclic longitude
                 processed_data_to_plot[lat_name],
-                processed_data_to_plot,
-                transform=ccrs.PlateCarree(),
-                levels=levels
+                data_cy,  # Use cyclic data
+                **plot_kwargs
             )
 
         # Step 5: Finalize the plot with a colorbar, title, and save if requested.

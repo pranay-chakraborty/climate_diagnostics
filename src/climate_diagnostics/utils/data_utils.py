@@ -61,7 +61,8 @@ def validate_and_get_sel_slice(
                         (data_coord.size > 0 and hasattr(data_coord.values[0], 'calendar'))  # Check for cftime
 
     if is_datetime_coord:
-        comp_data_min, comp_data_max = _validate_datetime_coordinates(
+        # THE KEY CHANGE IS HERE: Capture all four returned values
+        comp_req_min, comp_req_max, comp_data_min, comp_data_max = _validate_datetime_coordinates(
             coord_val_param, data_coord, coord_name_str, 
             comp_req_min, comp_req_max, min_data_val_raw, max_data_val_raw
         )
@@ -83,7 +84,7 @@ def _validate_datetime_coordinates(
     comp_req_max: Any, 
     min_data_val_raw: Any, 
     max_data_val_raw: Any
-) -> Tuple[Any, Any]:
+) -> Tuple[Any, Any, Any, Any]:
     """
     Helper function to validate and convert datetime coordinates for comparison.
     
@@ -123,9 +124,13 @@ def _validate_datetime_coordinates(
             "Relying on xarray's .sel() behavior.",
             UserWarning
         )
-        comp_data_min, comp_data_max = None, None
+        # On error, we still need to return four values. Returning the originals
+        # for comp_req and None for comp_data ensures the bounds check is skipped.
+        original_req_min, original_req_max = (coord_val_param.start, coord_val_param.stop) if isinstance(coord_val_param, slice) else (None, None)
+        return original_req_min, original_req_max, None, None
     
-    return comp_data_min, comp_data_max
+    # THE KEY CHANGE IS HERE: Return all four values
+    return comp_req_min, comp_req_max, comp_data_min, comp_data_max
 
 
 def _check_coordinate_bounds(
@@ -277,13 +282,31 @@ def select_process_data(
         warnings.warn(f"Level dimension '{level_name}' not found *as a dimension* in '{variable}'. Ignoring 'level' parameter.", UserWarning)
 
     if selection_dict:
-        if any(isinstance(v, slice) for v in selection_dict.values()) and method_dict:
-            warnings.warn("Applying selections. Slices will be used directly, 'nearest' for scalar points if specified.", UserWarning)
+        # Separate selections into those needing a method (like 'nearest') 
+        # and those that are exact (like slices).
+        # xarray's .sel() does not support per-variable methods in a single call.
+        
+        exact_sel_dict = {
+            k: v for k, v in selection_dict.items() if k not in method_dict
+        }
+        method_sel_dict = {
+            k: v for k, v in selection_dict.items() if k in method_dict
+        }
+
         try:
-            data_var = data_var.sel(selection_dict, method=method_dict if method_dict else None)
+            # 1. Apply exact selections first (slices, etc.)
+            if exact_sel_dict:
+                data_var = data_var.sel(exact_sel_dict)
+
+            # 2. Apply method-based selections on the result
+            if method_sel_dict:
+                # Assuming all methods are 'nearest' as per the logic above.
+                # If you plan to support other methods like 'pad', this would need adjustment.
+                data_var = data_var.sel(method_sel_dict, method='nearest')
+
         except Exception as e:
             warnings.warn(f"Error during final .sel() operation: {e}", UserWarning)
-            warnings.warn(f"Selection dictionary: {selection_dict}, Method dictionary: {method_dict}", UserWarning)
+            warnings.warn(f"Selection dictionaries were: exact={exact_sel_dict}, method={method_sel_dict}", UserWarning)
             raise
 
     if data_var.size == 0:
