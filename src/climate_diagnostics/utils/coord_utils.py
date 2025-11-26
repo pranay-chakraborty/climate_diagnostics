@@ -1,9 +1,13 @@
 import xarray as xr
 import numpy as np
 import warnings
+from typing import List, Optional, Union, Dict  # 27 Nov: Added type hints support
 
 
-def get_coord_name(xarray_like_obj, possible_names):
+def get_coord_name(
+    xarray_like_obj: Union[xr.DataArray, xr.Dataset], 
+    possible_names: List[str]
+) -> Optional[str]:  # 27 Nov: Added type annotations
     """
     Find the name of a coordinate in an xarray object from a list of possible names.
 
@@ -34,7 +38,10 @@ def get_coord_name(xarray_like_obj, possible_names):
     return None
 
 
-def filter_by_season(data_subset, season='annual'):
+def filter_by_season(
+    data_subset: Union[xr.DataArray, xr.Dataset], 
+    season: str = 'annual'
+) -> Union[xr.DataArray, xr.Dataset]:  # 27 Nov: Added type annotations
     """
     Filter climate data for a specific season using xarray's time accessors.
 
@@ -58,15 +65,17 @@ def filter_by_season(data_subset, season='annual'):
     Raises
     ------
     ValueError
-        If a usable time coordinate cannot be found or processed.
+        If a usable time coordinate cannot be found or processed, or if the season is invalid.
 
     Notes
     -----
-    This function relies on xarray's `.dt` accessor, which works for both
-    `numpy.datetime64` and `cftime` objects (if `cftime` is installed).
+    - This function relies on xarray's `.dt` accessor.
+    - Note on 'DJF' (Winter): This function filters for Dec, Jan, and Feb based on the 
+      month index. It does NOT automatically shift December to align with the Jan/Feb 
+      of the following year.
     """
     # Use a constant for season definitions for clarity
-    SEASON_MONTHS = {
+    SEASON_MONTHS: Dict[str, List[int]] = {  # 27 Nov: Type annotation for dict
         'jjas': [6, 7, 8, 9],  # Monsoon
         'djf': [12, 1, 2],     # Winter
         'mam': [3, 4, 5],      # Pre-monsoon
@@ -76,17 +85,23 @@ def filter_by_season(data_subset, season='annual'):
     
     normalized_season = season.lower()
     
+    # 27 Nov: Fail fast if season is invalid before doing expensive coordinate lookups
+    supported_seasons = ['annual'] + list(SEASON_MONTHS.keys())
+    if normalized_season not in supported_seasons:
+         raise ValueError(f"Unknown season '{season}'. Supported options: {supported_seasons}")
+
     if normalized_season == 'annual':
         return data_subset
 
     # Step 1: Locate the time coordinate.
     time_coord_name = get_coord_name(data_subset, ['time', 't'])
-    if not time_coord_name or time_coord_name not in data_subset.dims:
-        raise ValueError("A recognizable time dimension (e.g., 'time', 't') is required for seasonal filtering.")
+    
+    # 27 Nov: Relaxed check. It is sufficient if the name exists in coords, 
+    # we don't strictly enforce it being in 'dims' (though it usually is).
+    if not time_coord_name:
+        raise ValueError("A recognizable time coordinate (e.g., 'time', 't') is required.")
 
     # Step 2: Use xarray's .dt accessor to get the month.
-    # This is the key improvement: it works for both datetime64 and cftime objects
-    # without needing a slow, memory-intensive manual loop.
     time_coord = data_subset[time_coord_name]
     if hasattr(time_coord.dt, 'month'):
         month_coord = time_coord.dt.month
@@ -98,23 +113,22 @@ def filter_by_season(data_subset, season='annual'):
         )
 
     # Step 3: Filter the data.
-    selected_months = SEASON_MONTHS.get(normalized_season)
-    if selected_months:
-        # .isin() is a powerful and efficient way to select multiple values.
-        filtered_data = data_subset.where(month_coord.isin(selected_months), drop=True)
-        
-        # Check if the filtering resulted in an empty dataset and warn the user.
-        if filtered_data[time_coord_name].size == 0:
-            warnings.warn(
-                f"No data found for season '{season.upper()}' within the dataset's time range.",
-                UserWarning
-            )
-        return filtered_data
-    else:
-        # Warn about the unsupported season and return the original data.
-        supported_seasons = ['annual'] + list(SEASON_MONTHS.keys())
+    selected_months = SEASON_MONTHS[normalized_season] # Safe access due to earlier check
+
+    # 27 Nov: Optimized performance. Replaced .where(..., drop=True) with .sel().
+    # .where() casts to float and masks data (memory intensive), .sel() simply subsets.
+    try:
+        mask = month_coord.isin(selected_months)
+        filtered_data = data_subset.sel({time_coord_name: mask})
+    except Exception as e:
+        # Fallback in rare cases where .sel with boolean mask fails on non-dim coords
+        filtered_data = data_subset.where(mask, drop=True)
+
+    # Check if the filtering resulted in an empty dataset and warn the user.
+    if filtered_data[time_coord_name].size == 0:
         warnings.warn(
-            f"Unknown season '{season}'. Supported options are: {supported_seasons}. Returning unfiltered data.",
+            f"No data found for season '{season.upper()}' within the dataset's time range.",
             UserWarning
         )
-        return data_subset 
+
+    return filtered_data
